@@ -1,0 +1,15 @@
+pypdf2
+marker-pdf
+langchain
+langchain-community
+tqdm
+pandas
+numpy
+seaborn
+networkx
+scikit-learn
+matplotlib
+transformers
+torch
+torchvision
+ollama
