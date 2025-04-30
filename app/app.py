@@ -98,13 +98,19 @@ def create_app():
                         kg_model = gr.Textbox(label="Language Model for Knowledge Graph", value=config["ollama"]["models"]["kg"], placeholder="gemma3:1b")
                         chunk_size = gr.Slider(label="Chunk Size", minimum=500, maximum=3000, value=config["parameters"]["chunk_size"], step=100)
                         chunk_overlap = gr.Slider(label="Chunk Overlap", minimum=0, maximum=500, value=config["parameters"]["chunk_overlap"], step=50)
+                        kg_format_type = gr.Dropdown(
+                            label="Knowledge Graph Format", 
+                            choices=["json", "xml"], 
+                            value="json",
+                            info="Select the format for knowledge graph extraction"
+                        )
                         
                     with gr.Column():
                         status = gr.Textbox(label="Status", value="Ready", interactive=False)
                         run_button = gr.Button("Run Complete Pipeline", variant="primary")
                         output_text = gr.Textbox(label="Output", interactive=False)
                         
-                        def run_pipeline(input_dir, output_dir, min_size_kb, ollama_url, vision_model, kg_model, chunk_size, chunk_overlap):
+                        def run_pipeline(input_dir, output_dir, min_size_kb, ollama_url, vision_model, kg_model, chunk_size, chunk_overlap, kg_format):
                             if not input_dir or not output_dir:
                                 return "Please provide both input and output directories."
                             
@@ -129,7 +135,8 @@ def create_app():
                             # Step 3: Create Knowledge Graph
                             print("Step 3/4: Creating Knowledge Graph")
                             kg_path = os.path.join(kg_dir, "knowledge_graph.json")
-                            kg_result = markdown_to_knowledge_graph(md_dir, kg_path, ollama_url, kg_model, chunk_size, chunk_overlap)
+                            kg_result = markdown_to_knowledge_graph(md_dir, kg_path, ollama_url, kg_model, 
+                                                                   chunk_size, chunk_overlap, kg_format)
                             results.append(f"Knowledge Graph created: {kg_result} saved to {kg_path}")
                             
                             # Step 4: Post-process Knowledge Graph
@@ -142,7 +149,8 @@ def create_app():
                         
                         run_button.click(
                             fn=run_pipeline,
-                            inputs=[input_dir, output_dir, min_size_kb, ollama_url, vision_model, kg_model, chunk_size, chunk_overlap],
+                            inputs=[input_dir, output_dir, min_size_kb, ollama_url, vision_model, 
+                                   kg_model, chunk_size, chunk_overlap, kg_format_type],
                             outputs=[output_text]
                         )
             
@@ -205,21 +213,31 @@ def create_app():
                         s3_ollama_model = gr.Textbox(label="Ollama Model Name", value=config["ollama"]["models"]["kg"], placeholder="gemma3:1b")
                         s3_chunk_size = gr.Slider(label="Chunk Size", minimum=500, maximum=3000, value=config["parameters"]["chunk_size"], step=100)
                         s3_chunk_overlap = gr.Slider(label="Chunk Overlap", minimum=0, maximum=500, value=config["parameters"]["chunk_overlap"], step=50)
+                        s3_format_type = gr.Dropdown(
+                            label="KG Format", 
+                            choices=["json", "xml"], 
+                            value="json",
+                            info="Select the format for knowledge graph extraction"
+                        )
                     with gr.Column():
                         s3_status = gr.Textbox(label="Status", value="Ready", interactive=False)
                         s3_run_button = gr.Button("Create Knowledge Graph", variant="primary")
                         s3_output_text = gr.Textbox(label="Output", interactive=False)
                         
-                        def run_step3(input_dir, output_file, ollama_url, ollama_model, chunk_size, chunk_overlap):
+                        def run_step3(input_dir, output_file, ollama_url, ollama_model, chunk_size, chunk_overlap, format_type):
                             if not input_dir or not output_file:
                                 return "Please provide both input directory and output file."
                             os.makedirs(os.path.dirname(output_file), exist_ok=True)
-                            kg_result = markdown_to_knowledge_graph(input_dir, output_file, ollama_url, ollama_model, chunk_size, chunk_overlap)
+                            kg_result = markdown_to_knowledge_graph(
+                                input_dir, output_file, ollama_url, ollama_model, 
+                                chunk_size, chunk_overlap, format_type
+                            )
                             return f"Knowledge Graph created: {kg_result} saved to {output_file}"
                         
                         s3_run_button.click(
                             fn=run_step3,
-                            inputs=[s3_input_dir, s3_output_file, s3_ollama_url, s3_ollama_model, s3_chunk_size, s3_chunk_overlap],
+                            inputs=[s3_input_dir, s3_output_file, s3_ollama_url, s3_ollama_model, 
+                                   s3_chunk_size, s3_chunk_overlap, s3_format_type],
                             outputs=[s3_output_text]
                         )
             
@@ -255,39 +273,33 @@ def create_app():
                         viz_run_button = gr.Button("Visualize Knowledge Graph", variant="primary")
                 
                 with gr.Row():
-                    viz_output = gr.HTML(label="Interactive Knowledge Graph", value="<div style='height:700px'>Knowledge graph visualization will appear here after clicking the button above.</div>")
+                    viz_output = gr.Image(label="Knowledge Graph Visualization", interactive=False)
                     
                     def visualize_kg(kg_dir):
                         if not kg_dir or not os.path.exists(kg_dir):
-                            return "<div class='error'>Please provide a valid knowledge graph directory</div>"
+                            return None
                         
-                        # Look for finalgraph.csv and metadata.csv files
+                        # Look for finalgraph.csv
                         finalgraph_path = os.path.join(kg_dir, "finalgraph.csv")
                         metadata_path = os.path.join(kg_dir, "metadata.csv")
                         
                         if not os.path.exists(finalgraph_path):
-                            return "<div class='error'>finalgraph.csv not found in the specified directory</div>"
+                            return None
                         
                         # Create visualization
-                        viz_path = os.path.join(kg_dir, "visualization.html")
+                        viz_path = os.path.join(kg_dir, "visualization.png")
                         
                         result = create_knowledge_graph_visualization(
                             finalgraph_path, 
                             metadata_path if os.path.exists(metadata_path) else None,
-                            viz_path
+                            viz_path,
+                            figsize=(12, 10)
                         )
                         
-                        if result:
-                            # Read the generated HTML file content
-                            try:
-                                with open(viz_path, 'r', encoding='utf-8') as f:
-                                    html_content = f.read()
-                                # Return the HTML content directly
-                                return html_content
-                            except Exception as e:
-                                return f"<div class='error'>Error reading visualization file: {e}</div>"
+                        if result and os.path.exists(viz_path):
+                            return viz_path
                         else:
-                            return "<div class='error'>Failed to create visualization</div>"
+                            return None
                     
                     viz_run_button.click(
                         fn=visualize_kg,

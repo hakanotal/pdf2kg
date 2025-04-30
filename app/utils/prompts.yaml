@@ -1,0 +1,49 @@
+# Knowledge Graph Extraction Prompts
+
+JSON_KG_PROMPT: |
+  You are a knowledge graph expert that extracts terms and their relations from a given context.
+  Your task is to identify key concepts and their relationships in the provided text.
+  Guidelines:
+  1. Identify two important terms (nodes) in the text including objects, entities, locations, organizations, 
+  persons, conditions, documents, services, concepts, and dates.
+  2. Determine relationships between pairs of terms that are mentioned in proximity.
+  3. Describe each relationship clearly and concisely.
+
+  IMPORTANT: Your response MUST be a valid JSON object without any additional text or explanation. 
+  Format your output exactly as follows:
+  {
+    "edges": [
+      {
+        "node_1": "Concept 1",
+        "edge": "Relationship between the two nodes"
+        "node_2": "Concept 2",
+      },
+      {...}
+    ]
+  }
+
+XML_KG_PROMPT: |
+  You are a knowledge graph expert that extracts terms and their relations from a given context.
+  Your task is to identify key concepts and their relationships in the provided text.
+  Guidelines:
+  1. Identify important terms (nodes) in the text including: objects, entities, locations, organizations, 
+  persons, conditions, documents, services, concepts, and dates.
+  2. Focus on the main entities and their relationships described *only* within this text.
+  3. Describe each relationship clearly and concisely.
+  4. Do NOT hallucinate or infer information beyond the provided text.
+
+  IMPORTANT: Your response MUST be a valid XML object without any additional text or explanation. 
+  Format your output exactly as follows:
+  <triplets>
+  <triplet>
+  <subject>node 1</subject>
+  <predicate>relation</predicate>
+  <object>node 2</object>
+  </triplet>
+  <triplet>
+  <subject>node 1</subject>
+  <predicate>relation</predicate>
+  <object>node 2</object>
+  </triplet>
+  <!-- ... more triplets as needed ... -->
+  </triplets>

@@ -32,20 +32,21 @@ def chunks2df(documents) -> pd.DataFrame:
     df = pd.DataFrame(rows)
     return df
 
-def df2graph(dataframe: pd.DataFrame, ollama_client, model=None, batch_size=5, progress=None) -> list:
+def df2graph(dataframe: pd.DataFrame, ollama_client, model=None, format_type="json", batch_size=5, progress=None) -> list:
     """Generate knowledge graph from text in dataframe.
     
     Args:
         dataframe: DataFrame containing text columns
         ollama_client: OllamaClient instance
         model: Name of the Ollama model to use
+        format_type: Output format type ("json" or "xml")
         batch_size: Number of rows to process at once with progress updates
         progress: Optional progress callback for Gradio
         
     Returns:
         List of graph edge dictionaries
     """
-    logger.info(f"Generating knowledge graph from {len(dataframe)} text chunks")
+    logger.info(f"Generating knowledge graph from {len(dataframe)} text chunks using {format_type} format")
     
     all_edges = []
     total_batches = (len(dataframe) + batch_size - 1) // batch_size
@@ -62,7 +63,7 @@ def df2graph(dataframe: pd.DataFrame, ollama_client, model=None, batch_size=5, p
         batch_edges = []
         for _, row in batch.iterrows():
             try:
-                edges = ollama_client.generate_graph(row.text, {"chunk_id": row.chunk_id}, model)
+                edges = ollama_client.generate_graph(row.text, {"chunk_id": row.chunk_id}, model, format_type)
                 if edges:
                     batch_edges.append(edges)
             except Exception as e:

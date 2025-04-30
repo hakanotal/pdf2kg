@@ -81,7 +81,7 @@ class MarkdownLoader:
         
         return documents
 
-def process_single_markdown(md_path, ollama_url, model, chunk_size, chunk_overlap, temp_dir, progress=None):
+def process_single_markdown(md_path, ollama_url, model, chunk_size, chunk_overlap, temp_dir, format_type="json", progress=None):
     """Process a single markdown file and return the path to the temp graph file."""
     md_filename = os.path.basename(md_path)
     logger.info(f"Processing markdown: {md_filename}")
@@ -111,8 +111,8 @@ def process_single_markdown(md_path, ollama_url, model, chunk_size, chunk_overla
     ollama_client = OllamaClient(host=ollama_url)
     
     # Generate graph from dataframe
-    logger.info(f"Generating knowledge graph for {md_filename}...")
-    graph_list = df2graph(df, ollama_client, model, batch_size=5, progress=progress)
+    logger.info(f"Generating knowledge graph for {md_filename} using {format_type} format...")
+    graph_list = df2graph(df, ollama_client, model, format_type=format_type, batch_size=5, progress=progress)
     
     if not graph_list:
         logger.error(f"Failed to generate knowledge graph edges for {md_filename}")
@@ -133,7 +133,8 @@ def process_single_markdown(md_path, ollama_url, model, chunk_size, chunk_overla
     return temp_graph_path
 
 def markdown_to_knowledge_graph(input_dir, output_file, ollama_url="http://localhost:11434", 
-                               model="gemma3:12b", chunk_size=1500, chunk_overlap=200, progress=None):
+                               model="gemma3:12b", chunk_size=1500, chunk_overlap=200, 
+                               format_type="json", progress=None):
     """
     Process all markdown files in the input directory to create a knowledge graph
     
@@ -144,6 +145,7 @@ def markdown_to_knowledge_graph(input_dir, output_file, ollama_url="http://local
         model: Name of the Ollama model to use
         chunk_size: Size of text chunks for processing
         chunk_overlap: Overlap between text chunks
+        format_type: Output format type ("json" or "xml")
         progress: Optional progress callback for Gradio
     
     Returns:
@@ -170,7 +172,8 @@ def markdown_to_knowledge_graph(input_dir, output_file, ollama_url="http://local
                 
             # Process the file
             graph_path = process_single_markdown(
-                md_file, ollama_url, model, chunk_size, chunk_overlap, temp_dir, progress
+                md_file, ollama_url, model, chunk_size, chunk_overlap, temp_dir, 
+                format_type=format_type, progress=progress
             )
             
             if graph_path:

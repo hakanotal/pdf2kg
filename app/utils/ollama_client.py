@@ -1,6 +1,10 @@
 from ollama import Client
 import json
 import logging
+import re
+import xml.etree.ElementTree as ET
+import os
+import yaml
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -16,6 +20,20 @@ class OllamaClient:
             host: Ollama server URL
         """
         self.client = Client(host=host)
+        self.prompts = self._load_prompts()
+    
+    def _load_prompts(self):
+        """Load prompts from the YAML file."""
+        prompts_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "prompts.yaml")
+        try:
+            with open(prompts_path, 'r') as f:
+                prompts = yaml.safe_load(f)
+            logger.info(f"Successfully loaded prompts from {prompts_path}")
+            return prompts
+        except Exception as e:
+            logger.error(f"Error loading prompts from {prompts_path}: {e}")
+            return {}
+            
     
     def extract_json_from_response(self, response_text):
         """Extract JSON from the response text, handling potential text before or after the JSON."""
@@ -47,42 +65,64 @@ class OllamaClient:
                 logger.error(f"Response text: {response_text}")
                 raise
     
-    def generate_graph(self, input_text, metadata={}, model="gemma3:1b"):
+    def extract_xml_from_response(self, response_text):
+        """Extract XML from the response text, handling potential text before or after the XML."""
+        try:
+            # Try to find XML content between <triplets> tags
+            pattern = r'<triplets>.*?</triplets>'
+            match = re.search(pattern, response_text, re.DOTALL)
+            
+            if match:
+                xml_str = match.group(0)
+                root = ET.fromstring(xml_str)
+                triplets = []
+                
+                for triplet in root.findall('.//triplet'):
+                    subject = triplet.find('subject').text
+                    predicate = triplet.find('predicate').text
+                    object_text = triplet.find('object').text
+                    
+                    triplets.append({
+                        "node_1": subject,
+                        "edge": predicate,
+                        "node_2": object_text
+                    })
+                
+                return triplets
+            else:
+                logger.error("No XML triplets found in the response")
+                logger.error(f"Response text: {response_text}")
+                return None
+                
+        except Exception as e:
+            logger.error(f"Failed to extract XML: {e}")
+            logger.error(f"Response text: {response_text}")
+            return None
+    
+    def generate_graph(self, input_text, metadata={}, model="gemma3:1b", format_type="json"):
         """Generate knowledge graph edges from input text using Ollama.
         
         Args:
             input_text: Text to extract knowledge graph from
             metadata: Additional metadata to add to the result
             model: Name of the Ollama model to use
+            format_type: Output format type ("json" or "xml")
             
         Returns:
             List of edge dictionaries or None on error
         """
-        # System prompt for knowledge graph generation
-        sys_prompt = (
-            "You are a knowledge graph expert that extracts terms and their relations from a given context.\n"
-            "Your task is to identify key concepts and their relationships in the provided text.\n"
-            "Guidelines:\n"
-            "1. Identify two important terms (nodes) in the text including objects, entities, locations, organizations, "
-            "persons, conditions, documents, services, concepts, and dates.\n"
-            "2. Determine relationships between pairs of terms that are mentioned in proximity.\n"
-            "3. Describe each relationship clearly and concisely.\n\n"
-            "IMPORTANT: Your response MUST be a valid JSON object without any additional text or explanation. "
-            "Format your output exactly as follows:\n"
-            "{\n"
-            '  "edges": [\n'
-            "    {\n"
-            '      "node_1": "Concept 1",\n'
-            '      "edge": "Relationship between the two nodes"\n'
-            '      "node_2": "Concept 2",\n'
-            "    },\n"
-            "    {...}\n"
-            "  ]\n"
-            "}\n"
-        )
+        # Choose system prompt based on format type
+        if format_type.lower() == "xml":
+            sys_prompt = self.prompts.get("XML_KG_PROMPT", "")
+        else:
+            sys_prompt = self.prompts.get("JSON_KG_PROMPT", "")
+            format_type = "json"  # default to json if not xml
         
         # User prompt with context
-        user_prompt = f"Context: ```{input_text}```"
+        if format_type.lower() == "xml":
+            user_prompt = f"Context Text:\n{input_text}"
+        else:
+            user_prompt = f"Context: ```{input_text}```"
         
         try:
             # Call the Ollama API
@@ -95,25 +135,37 @@ class OllamaClient:
                 messages=[
                     {"role": "system", "content": sys_prompt},
                     {"role": "user", "content": user_prompt}
-                ],
-                format="json"
+                ]
             )
             
             # Get the content from the last message
             response_content = response['message']['content']
             
-            # Extract JSON from the response
-            json_result = self.extract_json_from_response(response_content)
-            
-            # Get the edges from the result
-            if isinstance(json_result, dict) and 'edges' in json_result:
-                result = json_result['edges']
-                # Add metadata to each item
-                result = [dict(item, **metadata) for item in result]
-                return result
+            # Process response based on format type
+            if format_type.lower() == "xml":
+                # Extract XML from the response
+                triplets = self.extract_xml_from_response(response_content)
+                
+                if triplets:
+                    # Add metadata to each item
+                    result = [dict(item, **metadata) for item in triplets]
+                    return result
+                else:
+                    logger.error("Failed to extract valid triplets from XML response")
+                    return None
             else:
-                logger.error(f"Unexpected JSON structure, 'edges' key not found: {json_result}")
-                return None
+                # Extract JSON from the response
+                json_result = self.extract_json_from_response(response_content)
+                
+                # Get the edges from the result
+                if isinstance(json_result, dict) and 'edges' in json_result:
+                    result = json_result['edges']
+                    # Add metadata to each item
+                    result = [dict(item, **metadata) for item in result]
+                    return result
+                else:
+                    logger.error(f"Unexpected JSON structure, 'edges' key not found: {json_result}")
+                    return None
                 
         except Exception as e:
             logger.error(f"Error in generate_graph: {e}")

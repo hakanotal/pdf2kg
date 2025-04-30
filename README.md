@@ -47,7 +47,7 @@ The application provides a Gradio web interface with these tabs:
 3. **2. PDF to Markdown**: Transform PDF documents to Markdown
 4. **3. Markdown to KG**: Generate a knowledge graph from Markdown
 5. **4. Post-process**: Refine the knowledge graph
-6. **5. Visualization**: Interactively visualize the knowledge graph
+6. **5. Visualization**: View a static visualization of the knowledge graph
 
 ### Workflow
 
@@ -55,7 +55,7 @@ The application provides a Gradio web interface with these tabs:
 2. Run the application with `python main.py`
 3. Use the "Full Pipeline" tab or process step by step
 4. View results in the `output/final/` directory
-5. Visualize the knowledge graph in the "Visualization" tab
+5. Generate and view the knowledge graph visualization in the "Visualization" tab
 
 ## Project Structure
 
