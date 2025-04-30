@@ -1,10 +1,9 @@
-from .prompts import generate_graph
-from tqdm import tqdm
-
 import pandas as pd
 import numpy as np
-import logging
 import uuid
+from tqdm import tqdm
+import logging
+import json
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -33,14 +32,15 @@ def chunks2df(documents) -> pd.DataFrame:
     df = pd.DataFrame(rows)
     return df
 
-
-def df2graph(dataframe: pd.DataFrame, model=None, batch_size=5) -> list:
+def df2graph(dataframe: pd.DataFrame, ollama_client, model=None, batch_size=5, progress=None) -> list:
     """Generate knowledge graph from text in dataframe.
     
     Args:
         dataframe: DataFrame containing text columns
+        ollama_client: OllamaClient instance
         model: Name of the Ollama model to use
         batch_size: Number of rows to process at once with progress updates
+        progress: Optional progress callback for Gradio
         
     Returns:
         List of graph edge dictionaries
@@ -48,14 +48,21 @@ def df2graph(dataframe: pd.DataFrame, model=None, batch_size=5) -> list:
     logger.info(f"Generating knowledge graph from {len(dataframe)} text chunks")
     
     all_edges = []
-    for i in tqdm(range(0, len(dataframe), batch_size), desc="Generating graph"):
+    total_batches = (len(dataframe) + batch_size - 1) // batch_size
+    
+    for i in range(0, len(dataframe), batch_size):
+        if progress:
+            # Calculate progress between 0.3 and 0.9
+            current_progress = 0.3 + (0.6 * (i / len(dataframe)))
+            progress(current_progress, desc=f"Generating graph: batch {i//batch_size+1}/{total_batches}")
+            
         batch = dataframe.iloc[i:i+batch_size]
         
         # Process each row in the batch
         batch_edges = []
         for _, row in batch.iterrows():
             try:
-                edges = generate_graph(row.text, {"chunk_id": row.chunk_id}, model)
+                edges = ollama_client.generate_graph(row.text, {"chunk_id": row.chunk_id}, model)
                 if edges:
                     batch_edges.append(edges)
             except Exception as e:
@@ -70,7 +77,6 @@ def df2graph(dataframe: pd.DataFrame, model=None, batch_size=5) -> list:
         logger.info(f"Processed {min(i+batch_size, len(dataframe))}/{len(dataframe)} chunks")
     
     return all_edges
-
 
 def graph2df(nodes_list) -> pd.DataFrame:
     """Convert graph edges list to a DataFrame.
@@ -91,20 +97,13 @@ def graph2df(nodes_list) -> pd.DataFrame:
     graph_dataframe = pd.DataFrame(nodes_list).replace("", np.nan)
     
     # Clean up data
-    graph_dataframe = graph_dataframe[["node_1", "node_1_type", "node_2", "node_2_type", "edge", "chunk_id"]]
-    graph_dataframe.dropna(subset=["node_1", "node_1_type", "node_2", "node_2_type"], inplace=True)
+    graph_dataframe = graph_dataframe[["node_1", "node_2", "edge", "chunk_id"]]
+    graph_dataframe.dropna(subset=["node_1", "node_2"], inplace=True)
     graph_dataframe["count"] = 4 
     graph_dataframe["edge_type"] = "relation"
-
-    for index, row in graph_dataframe.iterrows():
-        if row["node_1_type"] not in ["object", "entity", "location", "organization", "person", "condition", "documents", "service", "concept", "date"]:
-            graph_dataframe.at[index, "node_1_type"] = "other"
-
-        if row["node_2_type"] not in ["object", "entity", "location", "organization", "person", "condition", "documents", "service", "concept", "date"]:
-            graph_dataframe.at[index, "node_2_type"] = "other"
     
     # Normalize text
-    for col in ["node_1", "node_2", "node_1_type", "node_2_type"]:
+    for col in ["node_1", "node_2"]:
         if col in graph_dataframe.columns:
             graph_dataframe[col] = graph_dataframe[col].apply(lambda x: str(x).lower().strip() if x is not None else "")
     
@@ -112,7 +111,6 @@ def graph2df(nodes_list) -> pd.DataFrame:
     graph_dataframe = graph_dataframe.drop_duplicates(subset=["node_1", "node_2", "edge"])
     
     return graph_dataframe
-
 
 def add_ctx_prox_edges(df: pd.DataFrame) -> pd.DataFrame:
     """Extract edges from the dataframe based on contextual proximity.
@@ -123,12 +121,7 @@ def add_ctx_prox_edges(df: pd.DataFrame) -> pd.DataFrame:
     Returns:
         DataFrame of edges with contextual proximity
     """
-    ## Get unique nodes and their types
-    df_node_types = df[["node_1","node_1_type"]].rename(columns={"node_1": "node", "node_1_type": "node_type"})
-    df_node_types = df_node_types._append(df[["node_2","node_2_type"]].rename(columns={"node_2": "node", "node_2_type": "node_type"}))
-    df_node_types.drop_duplicates(subset=["node"], inplace=True)
-
-    ## Melt the dataframe into a list of nodes
+    # Melt the dataframe into a list of nodes
     dfg_long = pd.melt(
         df, id_vars=["chunk_id"], value_vars=["node_1", "node_2"], value_name="node"
     )
@@ -142,7 +135,7 @@ def add_ctx_prox_edges(df: pd.DataFrame) -> pd.DataFrame:
     self_loops_drop = dfg_wide[dfg_wide["node_1"] == dfg_wide["node_2"]].index
     df_cp = dfg_wide.drop(index=self_loops_drop).reset_index(drop=True)
 
-    ## Group and count edges.
+    # Group and count edges.
     df_cp = (
         df_cp.groupby(["node_1", "node_2"])
         .agg({"chunk_id": [",".join, "count"]})
@@ -156,17 +149,13 @@ def add_ctx_prox_edges(df: pd.DataFrame) -> pd.DataFrame:
     # Drop edges with 1 count
     df_cp = df_cp[df_cp["count"] != 1]
     df_cp["edge_type"] = "contextual_proximity"
-    df_cp["edge"] = "exists is same context"
-    df_cp["node_1_type"] = df_cp["node_1"].apply(lambda x: df_node_types[df_node_types["node"] == x]["node_type"].iloc[0])
-    df_cp["node_2_type"] = df_cp["node_2"].apply(lambda x: df_node_types[df_node_types["node"] == x]["node_type"].iloc[0])
+    df_cp["edge"] = "exists in same context"
 
     # Combine the two dataframes
     graph_df = (
         pd.concat([df, df_cp], axis=0)
             .groupby(["node_1", "node_2", "edge_type"])
             .agg({
-                "node_1_type": "first", 
-                "node_2_type": "first", 
                 "edge": ",".join, 
                 "count": "sum", 
                 "chunk_id": ",".join, 
@@ -175,67 +164,40 @@ def add_ctx_prox_edges(df: pd.DataFrame) -> pd.DataFrame:
 
     return graph_df
 
-
-
-# def df2ConceptsList(dataframe: pd.DataFrame, model=None, batch_size=10) -> list:
-#     """Extract concepts from text in dataframe.
+def save_graph_to_json(graph_df: pd.DataFrame, output_file: str):
+    """
+    Save the graph DataFrame to a JSON file with metadata
     
-#     Args:
-#         dataframe: DataFrame containing text columns
-#         model: Name of the Ollama model to use
-#         batch_size: Number of rows to process at once with progress updates
-        
-#     Returns:
-#         List of concept dictionaries
-#     """
-#     logger.info(f"Extracting concepts from {len(dataframe)} text chunks")
+    Args:
+        graph_df: DataFrame containing the graph edges
+        output_file: Path to save the JSON file
+    """
+    # Create a dictionary to store the graph data
+    graph_data = {
+        "metadata": {
+            "created_at": pd.Timestamp.now().isoformat(),
+            "edge_count": len(graph_df),
+            "node_count": len(pd.concat([graph_df['node_1'], graph_df['node_2']]).unique())
+        },
+        "edges": []
+    }
     
-#     all_results = []
-#     for i in tqdm(range(0, len(dataframe), batch_size), desc="Extracting concepts"):
-#         batch = dataframe.iloc[i:i+batch_size]
-        
-#         # Process each row in the batch
-#         batch_results = []
-#         for _, row in batch.iterrows():
-#             concepts = extractConcepts(
-#                 row.text, {"chunk_id": row.chunk_id, "type": "concept"}, model
-#             )
-#             if concepts:
-#                 batch_results.append(concepts)
-        
-#         # Flatten and add to all results
-#         for result in batch_results:
-#             if result:
-#                 all_results.extend(result)
-                
-#         # Log progress
-#         logger.info(f"Processed {min(i+batch_size, len(dataframe))}/{len(dataframe)} chunks")
+    # Convert each row to a dictionary and add to the edges list
+    for _, row in graph_df.iterrows():
+        edge = {
+            "node_1": row["node_1"],
+            "node_2": row["node_2"],
+            "edge": row["edge"],
+            "edge_type": row["edge_type"],
+            "count": int(row["count"]),
+            "chunk_id": row["chunk_id"]
+        }
+        graph_data["edges"].append(edge)
     
-#     return all_results
-
-
-# def concepts2Df(concepts_list) -> pd.DataFrame:
-#     """Convert concepts list to a DataFrame.
+    # Save to JSON file
+    with open(output_file, 'w', encoding='utf-8') as f:
+        json.dump(graph_data, f, indent=2, ensure_ascii=False)
     
-#     Args:
-#         concepts_list: List of concept dictionaries
-        
-#     Returns:
-#         DataFrame of concepts with cleaned values
-#     """
-#     if not concepts_list:
-#         logger.warning("Empty concepts list provided")
-#         return pd.DataFrame()
-        
-#     logger.info(f"Converting {len(concepts_list)} concepts to DataFrame")
+    logger.info(f"Saved graph with {len(graph_df)} edges to {output_file}")
     
-#     # Create DataFrame
-#     concepts_dataframe = pd.DataFrame(concepts_list).replace(" ", np.nan)
-    
-#     # Clean up data
-#     concepts_dataframe = concepts_dataframe.dropna(subset=["entity"])
-#     concepts_dataframe["entity"] = concepts_dataframe["entity"].apply(
-#         lambda x: str(x).lower().strip()
-#     )
-
-#     return concepts_dataframe
+    return output_file 

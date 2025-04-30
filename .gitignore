@@ -1,3 +1,8 @@
 .DS_Store
+/venv
+/__pycache__
 *.pdf
 *.md
+*.csv
+*.json
+*.html

@@ -1,0 +1,29 @@
+# PDF2KG Configuration File
+
+# Directory paths
+directories:
+  input:
+    all: "input/all"     # All input PDF files
+    pdf: "input/pdf"     # Filtered PDF files
+    md: "input/md"       # PDF files converted to markdown
+  output:
+    kg: "output/kg"      # Knowledge graph generated from markdowns
+    final: "output/final" # Post-processed knowledge graph and visualizations
+
+# Ollama configuration
+ollama:
+  url: "http://localhost:11434"
+  models:
+    vision: "llama3.2-vision:11b"  # Model for PDF to Markdown conversion
+    kg: "gemma3:1b"                # Model for knowledge graph extraction
+
+# Processing parameters
+parameters:
+  min_size_kb: 50       # Minimum PDF file size in KB
+  chunk_size: 1500      # Text chunk size for processing
+  chunk_overlap: 200    # Overlap between chunks
+
+# UI settings
+ui:
+  share: false          # Whether to share the app publicly
+  pwa: false             # Enable Progressive Web App 
