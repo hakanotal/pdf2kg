@@ -5,8 +5,5 @@
 __pycache__/
 *.pyc
 
-*.pdf
-*.md
-*.csv
-*.json
-*.html
+input/
+output/
