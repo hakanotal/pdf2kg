@@ -270,12 +270,13 @@ def create_app():
                     with gr.Column(scale=3):
                         viz_kg_dir = gr.Textbox(label="Knowledge Graph Directory", value=default_dirs["output_final"], placeholder="Path to directory containing final_kg files")
                     with gr.Column(scale=1):
+                        viz_show_contextual = gr.Checkbox(label="Show Contextual Proximity Edges", value=True, info="Toggle to show/hide contextual proximity edges")
                         viz_run_button = gr.Button("Visualize Knowledge Graph", variant="primary")
                 
                 with gr.Row():
                     viz_output = gr.Image(label="Knowledge Graph Visualization", interactive=False)
                     
-                    def visualize_kg(kg_dir):
+                    def visualize_kg(kg_dir, show_contextual_proximity):
                         if not kg_dir or not os.path.exists(kg_dir):
                             return None
                         
@@ -293,7 +294,8 @@ def create_app():
                             finalgraph_path, 
                             metadata_path if os.path.exists(metadata_path) else None,
                             viz_path,
-                            figsize=(12, 10)
+                            figsize=(12, 10),
+                            show_contextual_proximity=show_contextual_proximity
                         )
                         
                         if result and os.path.exists(viz_path):
@@ -303,7 +305,7 @@ def create_app():
                     
                     viz_run_button.click(
                         fn=visualize_kg,
-                        inputs=[viz_kg_dir],
+                        inputs=[viz_kg_dir, viz_show_contextual],
                         outputs=[viz_output]
                     )
     

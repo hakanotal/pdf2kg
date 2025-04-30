@@ -15,8 +15,8 @@ JSON_KG_PROMPT: |
     "edges": [
       {
         "node_1": "Concept 1",
-        "edge": "Relationship between the two nodes"
-        "node_2": "Concept 2",
+        "edge": "Relationship between the two nodes",
+        "node_2": "Concept 2"
       },
       {...}
     ]
