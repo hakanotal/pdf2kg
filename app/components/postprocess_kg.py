@@ -11,16 +11,17 @@ from pathlib import Path
 from sklearn.cluster import DBSCAN
 import torch
 from transformers import AutoModel, AutoTokenizer
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+
 try:
     from gliner import GLiNER
     GLINER_AVAILABLE = True
 except ImportError:
     GLINER_AVAILABLE = False
     logger.warning("GLiNER is not available. Entity classification will be skipped.")
-
-# Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
 
 def load_knowledge_graph(filepath):
     """Load the knowledge graph from a JSON file."""

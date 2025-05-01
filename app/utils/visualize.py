@@ -6,13 +6,109 @@ import matplotlib.pyplot as plt
 import matplotlib
 matplotlib.use('Agg')  # Use non-interactive backend
 import logging
-import numpy as np
-from matplotlib.colors import LinearSegmentedColormap
 import matplotlib.patches as mpatches
+import yaml
+from matplotlib.cm import get_cmap
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+
+def load_config():
+    """Load the application configuration from config.yaml"""
+    try:
+        with open('config.yaml', 'r') as file:
+            return yaml.safe_load(file)
+    except Exception as e:
+        logger.error(f"Error loading config: {e}")
+        # Return default entity labels if config can't be loaded
+        return {"entity_classification": {"entity_labels": []}}
+
+def generate_entity_colors(entity_types):
+    """Generate colors for entity types using matplotlib color maps
+    
+    Args:
+        entity_types: List of entity type names
+        
+    Returns:
+        Dictionary mapping entity types to color codes
+    """
+    # Choose a colormap that gives distinct colors
+    colormap = get_cmap('tab20')  # 20 distinct colors
+    
+    # If we have more entity types than colors in tab20, fall back to other maps
+    if len(entity_types) > 20:
+        colormap = get_cmap('viridis')
+    
+    # Generate colors
+    entity_type_colors = {}
+    
+    # Always add default first
+    entity_type_colors['default'] = '#17becf'  # Keep a recognizable color for default
+    
+    # Generate colors for each entity type
+    for i, entity_type in enumerate(entity_types):
+        # Normalize index to be between 0 and 1 for color mapping
+        normalized_idx = i / max(1, len(entity_types) - 1)
+        
+        if len(entity_types) <= 20:
+            # For tab20, use discrete colors
+            color_idx = i % 20
+            rgba_color = colormap(color_idx)
+        else:
+            # For continuous colormaps like viridis
+            rgba_color = colormap(normalized_idx)
+        
+        # Convert RGBA to hex
+        hex_color = matplotlib.colors.rgb2hex(rgba_color)
+        entity_type_colors[entity_type] = hex_color
+    
+    return entity_type_colors
+
+def filter_relations_only(graph_data_path, output_dir=None):
+    """
+    Filter graph data to include only 'relation' type edges and save to a new CSV file.
+    
+    Args:
+        graph_data_path: Path to the original graph data CSV 
+        output_dir: Directory to save the filtered CSV (defaults to same directory as input)
+        
+    Returns:
+        str: Path to the filtered CSV file
+    """
+    try:
+        # Load the graph data
+        graph_df = pd.read_csv(graph_data_path)
+        logger.info(f"Loaded graph data with {len(graph_df)} edges for filtering")
+        
+        # Filter for relation edges only
+        if 'edge_type' in graph_df.columns:
+            relations_df = graph_df[graph_df['edge_type'] == 'relation'].copy()
+            logger.info(f"Filtered to {len(relations_df)} relation edges")
+        else:
+            # If edge_type column doesn't exist, assume all are relations
+            relations_df = graph_df.copy()
+            logger.warning("No edge_type column found, assuming all edges are relations")
+        
+        # Determine output path
+        if output_dir is None:
+            output_dir = os.path.dirname(graph_data_path)
+            
+        # Generate the output filename
+        base_filename = os.path.basename(graph_data_path)
+        filename_without_ext = os.path.splitext(base_filename)[0]
+        relations_filename = f"{filename_without_ext}_relations_only.csv"
+        output_path = os.path.join(output_dir, relations_filename)
+        
+        # Save the filtered data
+        relations_df.to_csv(output_path, index=False)
+        logger.info(f"Saved relations-only graph to {output_path}")
+        
+        return output_path
+        
+    except Exception as e:
+        logger.error(f"Error filtering relations: {e}")
+        return None
 
 def create_knowledge_graph_visualization(graph_data_path, metadata_path=None, output_path="visualization.png", 
                                         figsize=(12, 10), progress=None, show_contextual_proximity=True):
@@ -38,17 +134,19 @@ def create_knowledge_graph_visualization(graph_data_path, metadata_path=None, ou
         graph_df = pd.read_csv(graph_data_path)
         logger.info(f"Loaded graph data with {len(graph_df)} edges")
         
+        # Also create a relations-only CSV file (but don't use it for visualization)
+        filter_relations_only(graph_data_path)
+        
+        # Load entity types from config
+        config = load_config()
+        entity_labels = config.get('entity_classification', {}).get('entity_labels', [])
+        logger.info(f"Loaded {len(entity_labels)} entity types from config")
+        
+        # Generate colors for entity types
+        entity_type_colors = generate_entity_colors(entity_labels)
+        
         # Load metadata if available
         node_entity_types = {}
-        entity_type_colors = {
-            'technique': '#1f77b4',  # Blue
-            'tool': '#ff7f0e',       # Orange
-            'person': '#2ca02c',     # Green
-            'organization': '#d62728', # Red
-            'concept': '#9467bd',    # Purple
-            'resource': '#8c564b',   # Brown
-            'default': '#17becf'     # Cyan
-        }
         
         if metadata_path and os.path.exists(metadata_path):
             try:
@@ -56,6 +154,16 @@ def create_knowledge_graph_visualization(graph_data_path, metadata_path=None, ou
                 if 'id' in metadata_df.columns and 'entity_type' in metadata_df.columns:
                     node_entity_types = dict(zip(metadata_df['id'], metadata_df['entity_type']))
                     logger.info(f"Loaded metadata with entity types for {len(node_entity_types)} nodes")
+                    
+                    # Add any entity types from metadata that weren't in config
+                    unique_entity_types = set(node_entity_types.values())
+                    for entity_type in unique_entity_types:
+                        if entity_type not in entity_type_colors and entity_type != 'default':
+                            # Generate new colors for entity types found in data but not in config
+                            new_types = [et for et in unique_entity_types if et not in entity_type_colors and et != 'default']
+                            new_colors = generate_entity_colors(new_types)
+                            entity_type_colors.update(new_colors)
+                            logger.info(f"Added colors for {len(new_colors)} additional entity types found in metadata")
                 else:
                     logger.warning("Metadata file does not contain required columns (id, entity_type)")
             except Exception as e:
@@ -173,29 +281,40 @@ def create_knowledge_graph_visualization(graph_data_path, metadata_path=None, ou
                 bbox=dict(boxstyle="round,pad=0.2", fc="white", ec="none", alpha=0.7)
             )
         
-        # Add legend for edges and entity types
-        legend_items = []
+        # Add separated legends for edge types and entity types
         
-        # Only add contextual proximity to legend if we're showing them
+        # Edge type legend items
+        edge_legend_items = []
         if show_contextual_proximity:
             contextual_patch = mpatches.Patch(color='#808080', label='Contextual Proximity', alpha=0.5)
-            legend_items.append(contextual_patch)
+            edge_legend_items.append(contextual_patch)
         
         relation_patch = mpatches.Patch(color='#22dd22', label='Direct Relation', alpha=0.5)
-        legend_items.append(relation_patch)
+        edge_legend_items.append(relation_patch)
         
-        # Add entity type legend items if metadata is available
+        # Entity type legend items
+        entity_legend_items = []
         if node_entity_types:
-            # Get unique entity types
-            unique_entity_types = set(node_entity_types.values())
+            # Get unique entity types that are actually used in the graph
+            unique_entity_types = set(nx.get_node_attributes(G, 'entity_type').values())
             
             # Add legend items for each entity type
             for entity_type in sorted(unique_entity_types):
-                color = entity_type_colors.get(entity_type, entity_type_colors['default'])
-                entity_patch = mpatches.Patch(color=color, label=f'{entity_type}', alpha=0.7)
-                legend_items.append(entity_patch)
+                if entity_type in entity_type_colors:
+                    color = entity_type_colors[entity_type]
+                    entity_patch = mpatches.Patch(color=color, label=f'{entity_type}', alpha=0.7)
+                    entity_legend_items.append(entity_patch)
         
-        plt.legend(handles=legend_items, loc='upper right', fontsize=10)
+        # Create two separate legends with titles
+        if edge_legend_items:
+            first_legend = plt.legend(handles=edge_legend_items, loc='upper left', 
+                          title='Edge Types', fontsize=9, title_fontsize=10)
+            plt.gca().add_artist(first_legend)  # Add first legend and keep it
+        
+        if entity_legend_items:
+            # Place entity types legend in a different location
+            plt.legend(handles=entity_legend_items, loc='upper right', 
+                      title='Entity Types', fontsize=9, title_fontsize=10)
         
         # Add title
         title_text = 'Knowledge Graph Visualization'

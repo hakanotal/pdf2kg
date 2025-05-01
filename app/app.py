@@ -12,32 +12,12 @@ from app.components.filter_small_pdfs import filter_small_pdfs
 from app.components.pdf_to_md import convert_pdfs_to_md
 from app.components.md_to_kg import markdown_to_knowledge_graph
 from app.components.postprocess_kg import postprocess_knowledge_graph
+from app.components.graphrag import process_graph_query
 from app.utils.visualize import create_knowledge_graph_visualization
 
 def load_config():
     """Load configuration from the config.yaml file."""
     config_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "config.yaml")
-    
-    # Default configuration in case file doesn't exist or can't be read
-    default_config = {
-        "directories": {
-            "input": {"all": "input/all", "pdf": "input/pdf", "md": "input/md"},
-            "output": {"kg": "output/kg", "final": "output/final"}
-        },
-        "ollama": {
-            "url": "http://localhost:11434",
-            "models": {"vision": "llama3.2-vision:11b", "kg": "gemma3:1b"}
-        },
-        "parameters": {
-            "min_size_kb": 50,
-            "chunk_size": 1500,
-            "chunk_overlap": 200
-        },
-        "ui": {
-            "share": False,
-            "pwa": True
-        }
-    }
     
     try:
         with open(config_path, 'r') as f:
@@ -46,7 +26,7 @@ def load_config():
         return config
     except Exception as e:
         print(f"Error loading config file: {e}, using default configuration")
-        return default_config
+        return {}
 
 # Create default directories
 def create_default_directories(config):
@@ -310,6 +290,46 @@ def create_app():
                         fn=visualize_kg,
                         inputs=[viz_kg_dir, viz_show_contextual],
                         outputs=[viz_output]
+                    )
+            
+            # GraphRAG Tab
+            with gr.TabItem("6. GraphRAG Chat"):
+                gr.Markdown("""
+                # Knowledge Graph Question Answering
+                
+                Ask questions about your knowledge graph using the GraphRAG approach. 
+                The system will analyze communities within the graph and generate answers based on the graph structure.
+                """)
+                
+                with gr.Row():
+                    with gr.Column(scale=3):
+                        rag_kg_dir = gr.Textbox(label="Knowledge Graph Directory", value=default_dirs["output_final"], 
+                                             placeholder="Path to directory containing final_kg files")
+                        rag_ollama_url = gr.Textbox(label="Ollama Server URL", value=config["ollama"]["url"], 
+                                                 placeholder="http://localhost:11434")
+                        rag_ollama_model = gr.Textbox(label="Ollama Model Name", value=config["ollama"]["models"]["kg"], 
+                                                   placeholder="gemma3:12b")
+                        rag_query = gr.Textbox(label="Your Question", placeholder="Ask a question about the knowledge graph...", 
+                                            lines=2)
+                        rag_run_button = gr.Button("Ask Question", variant="primary")
+                
+                with gr.Row():
+                    with gr.Column():
+                        rag_process = gr.Textbox(label="Process Notes", interactive=False, lines=15)
+                        rag_answer = gr.Textbox(label="Final Answer", interactive=False, lines=10)
+                    
+                    def run_graphrag(kg_dir, query, ollama_url, model):
+                        if not query or not kg_dir:
+                            return "Please provide both a question and a knowledge graph directory.", "No query or knowledge graph specified."
+                        
+                        # Process the query using GraphRAG
+                        final_answer, process_notes = process_graph_query(kg_dir, query, ollama_url, model)
+                        return process_notes, final_answer
+                    
+                    rag_run_button.click(
+                        fn=run_graphrag,
+                        inputs=[rag_kg_dir, rag_query, rag_ollama_url, rag_ollama_model],
+                        outputs=[rag_process, rag_answer]
                     )
     
     return app

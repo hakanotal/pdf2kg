@@ -27,12 +27,20 @@ parameters:
 entity_classification:
   model: "gliner-community/gliner_large-v2.5"  # GLiNER model to use
   entity_labels:        # Labels for entity classification
-    - "technique"
-    - "tool"
     - "person"
     - "organization"
+    - "location"
+    - "indicator"
+    - "tool"
+    - "technique"
+    - "platform"
+    - "event"
+    - "document"
+    - "infrastructure"
+    - "vulnerability"
     - "concept"
-    - "resource"
+    - "date"
+    - "unknown"
 
 # UI settings
 ui:
