@@ -21,7 +21,7 @@ def create_knowledge_graph_visualization(graph_data_path, metadata_path=None, ou
     
     Args:
         graph_data_path: Path to the graph data CSV (finalgraph.csv)
-        metadata_path: Path to the node metadata CSV (metadata.csv) - not used in this version
+        metadata_path: Path to the node metadata CSV (metadata.csv) with entity type information
         output_path: Path to save the PNG visualization
         figsize: Size of the output figure in inches (width, height)
         progress: Optional progress callback for Gradio
@@ -37,6 +37,29 @@ def create_knowledge_graph_visualization(graph_data_path, metadata_path=None, ou
         # Load graph data
         graph_df = pd.read_csv(graph_data_path)
         logger.info(f"Loaded graph data with {len(graph_df)} edges")
+        
+        # Load metadata if available
+        node_entity_types = {}
+        entity_type_colors = {
+            'technique': '#1f77b4',  # Blue
+            'tool': '#ff7f0e',       # Orange
+            'person': '#2ca02c',     # Green
+            'organization': '#d62728', # Red
+            'concept': '#9467bd',    # Purple
+            'resource': '#8c564b',   # Brown
+            'default': '#17becf'     # Cyan
+        }
+        
+        if metadata_path and os.path.exists(metadata_path):
+            try:
+                metadata_df = pd.read_csv(metadata_path)
+                if 'id' in metadata_df.columns and 'entity_type' in metadata_df.columns:
+                    node_entity_types = dict(zip(metadata_df['id'], metadata_df['entity_type']))
+                    logger.info(f"Loaded metadata with entity types for {len(node_entity_types)} nodes")
+                else:
+                    logger.warning("Metadata file does not contain required columns (id, entity_type)")
+            except Exception as e:
+                logger.warning(f"Error loading metadata: {e}")
         
         # Create a graph from the data
         if progress:
@@ -59,12 +82,14 @@ def create_knowledge_graph_visualization(graph_data_path, metadata_path=None, ou
             if not show_contextual_proximity and edge_type == 'contextual_proximity':
                 continue
             
-            # Add nodes if they don't exist
+            # Add nodes if they don't exist, with entity type from metadata
             if source not in G.nodes:
-                G.add_node(source, label=source)
+                entity_type = node_entity_types.get(source, 'default')
+                G.add_node(source, label=source, entity_type=entity_type)
             
             if target not in G.nodes:
-                G.add_node(target, label=target)
+                entity_type = node_entity_types.get(target, 'default')
+                G.add_node(target, label=target, entity_type=entity_type)
             
             # Add the edge with weight
             weight = row.get('value', 1)
@@ -110,8 +135,16 @@ def create_knowledge_graph_visualization(graph_data_path, metadata_path=None, ou
                 edge_colors.append('#22dd22')  # Green for direct relations
                 edge_widths.append(1.0 + 0.5 * weight)  # Thicker for relations
         
+        # Node colors based on entity type
+        node_colors = []
+        
+        for node in G.nodes():
+            entity_type = G.nodes[node].get('entity_type', 'default')
+            color = entity_type_colors.get(entity_type, entity_type_colors['default'])
+            node_colors.append(color)
+        
         # Draw the graph
-        nx.draw_networkx_nodes(G, pos, node_size=node_sizes, node_color='skyblue', alpha=0.7)
+        nx.draw_networkx_nodes(G, pos, node_size=node_sizes, node_color=node_colors, alpha=0.7)
         nx.draw_networkx_edges(G, pos, width=edge_widths, edge_color=edge_colors, alpha=0.5)
         nx.draw_networkx_labels(G, pos, font_size=8, font_family='sans-serif')
         
@@ -140,7 +173,7 @@ def create_knowledge_graph_visualization(graph_data_path, metadata_path=None, ou
                 bbox=dict(boxstyle="round,pad=0.2", fc="white", ec="none", alpha=0.7)
             )
         
-        # Add legend
+        # Add legend for edges and entity types
         legend_items = []
         
         # Only add contextual proximity to legend if we're showing them
@@ -150,6 +183,17 @@ def create_knowledge_graph_visualization(graph_data_path, metadata_path=None, ou
         
         relation_patch = mpatches.Patch(color='#22dd22', label='Direct Relation', alpha=0.5)
         legend_items.append(relation_patch)
+        
+        # Add entity type legend items if metadata is available
+        if node_entity_types:
+            # Get unique entity types
+            unique_entity_types = set(node_entity_types.values())
+            
+            # Add legend items for each entity type
+            for entity_type in sorted(unique_entity_types):
+                color = entity_type_colors.get(entity_type, entity_type_colors['default'])
+                entity_patch = mpatches.Patch(color=color, label=f'{entity_type}', alpha=0.7)
+                legend_items.append(entity_patch)
         
         plt.legend(handles=legend_items, loc='upper right', fontsize=10)
         

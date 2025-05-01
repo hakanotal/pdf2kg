@@ -12,16 +12,27 @@ directories:
 
 # Ollama configuration
 ollama:
-  url: "http://localhost:11434"
+  url: "http://169.226.53.98:11434" # "http://localhost:11434"
   models:
     vision: "llama3.2-vision:11b"  # Model for PDF to Markdown conversion
-    kg: "gemma3:1b"                # Model for knowledge graph extraction
+    kg: "gemma3:12b"                # Model for knowledge graph extraction
 
 # Processing parameters
 parameters:
   min_size_kb: 50       # Minimum PDF file size in KB
   chunk_size: 1500      # Text chunk size for processing
   chunk_overlap: 200    # Overlap between chunks
+
+# Entity classification parameters
+entity_classification:
+  model: "gliner-community/gliner_large-v2.5"  # GLiNER model to use
+  entity_labels:        # Labels for entity classification
+    - "technique"
+    - "tool"
+    - "person"
+    - "organization"
+    - "concept"
+    - "resource"
 
 # UI settings
 ui:

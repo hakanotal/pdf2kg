@@ -1,26 +1,78 @@
 # Knowledge Graph Extraction Prompts
 
-JSON_KG_PROMPT: |
-  You are a knowledge graph expert that extracts terms and their relations from a given context.
-  Your task is to identify key concepts and their relationships in the provided text.
-  Guidelines:
-  1. Identify two important terms (nodes) in the text including objects, entities, locations, organizations, 
-  persons, conditions, documents, services, concepts, and dates.
-  2. Determine relationships between pairs of terms that are mentioned in proximity.
-  3. Describe each relationship clearly and concisely.
+# JSON_KG_PROMPT: |
+#   You are a knowledge graph expert that extracts terms and their relations from a given context.
+#   Your task is to identify key concepts and their relationships in the provided text.
+#   Guidelines:
+#   1. Identify two important terms (nodes) in the text including objects, entities, locations, organizations, 
+#   persons, conditions, documents, services, concepts, and dates.
+#   2. Determine relationships between pairs of terms that are mentioned in proximity.
+#   3. Describe each relationship clearly and concisely.
 
-  IMPORTANT: Your response MUST be a valid JSON object without any additional text or explanation. 
-  Format your output exactly as follows:
+#   IMPORTANT: Your response MUST be a valid JSON object without any additional text or explanation. 
+#   Format your output exactly as follows:
+#   {
+#     "edges": [
+#       {
+#         "node_1": "Concept 1",
+#         "edge": "Relationship between the two nodes",
+#         "node_2": "Concept 2"
+#       },
+#       {...}
+#     ]
+#   }
+
+JSON_KG_PROMPT: |
+  You are a knowledge graph expert specializing in Open Source Intelligence (OSINT).
+  Your task is to extract structured knowledge graph triplets (Subject, Predicate, Object) from the provided text chunk, focusing on information relevant to OSINT investigations.
+
+  Guidelines:
+  1.  Identify specific entities (nodes) relevant to OSINT. Nodes should represent specific instances. Use the following types where applicable:
+      * `Person`: Individuals (e.g., names, usernames, handles).
+      * `Organization`: Companies, groups, agencies (e.g., 'NSA', 'Unit 8200', 'Evil Corp').
+      * `Location`: Geographic places (e.g., 'Syria', 'Moscow', '1 Cyber Street', GPS coordinates).
+      * `Indicator`: Technical clues (e.g., '192.168.1.1', 'user@example.com', 'malware.exe', 'CVE-2024-XXXX', 'darkwebforum.onion', '@socialhandle').
+      * `Tool`: Software, hardware, or specific OSINT tools (e.g., 'Maltego', 'Shodan', 'Nmap', 'Wireshark').
+      * `Technique`: Methods or procedures used (e.g., 'social engineering', 'phishing', 'network scanning', 'metadata analysis').
+      * `Platform`: Online services or systems (e.g., 'Twitter', 'Facebook', 'LinkedIn', 'GitHub', 'Dark Web Forum X', 'Pastebin').
+      * `Event`: Specific occurrences (e.g., 'Data Breach X', 'Protest Y', 'Conference Z').
+      * `Document`/`Report`: Specific files or publications (e.g., 'leaked_report.pdf', 'Analysis of Threat Actor Z').
+      * `Infrastructure`: Servers, domains, networks (e.g., 'example.com', 'Command and Control Server Alpha').
+      * `Vulnerability`: Specific identified weaknesses (e.g., 'CVE-2023-1234').
+      * `Concept`: Abstract OSINT ideas (e.g., 'attribution', 'threat actor', 'sock puppet').
+      * `Timestamp`/`Date`: Specific points or periods in time relevant to an event or finding.
+  2.  Determine the specific semantic relationship (edge/predicate) connecting pairs of identified nodes. The relationship must be explicitly stated or strongly implied by the text. Focus on connections valuable for an OSINT investigation.
+  3.  Use clear, concise, and informative predicate names. Where appropriate, use verbs reflecting OSINT actions or relationships, such as:
+      * `uses` (e.g., Person uses Tool, Organization uses Technique)
+      * `targets` (e.g., Organization targets Organization, Tool targets Vulnerability)
+      * `located_at` / `operates_in` (e.g., Person located_at Location, Organization operates_in Location)
+      * `communicates_on` (e.g., Person communicates_on Platform)
+      * `member_of` / `works_for` (e.g., Person member_of Organization)
+      * `owns` / `operates` (e.g., Person owns Infrastructure, Organization operates Platform)
+      * `reported_in` (e.g., Indicator reported_in Document)
+      * `observed_on` (e.g., Indicator observed_on Platform)
+      * `exploits` (e.g., Technique exploits Vulnerability)
+      * `alias_of` (e.g., Person alias_of Person)
+      * `hosts` (e.g., Infrastructure hosts Platform)
+      * `occurred_on` / `occurred_at` (e.g., Event occurred_on Date, Event occurred_at Location)
+      * `associated_with` (for general connections if specifics aren't clear)
+      * You may define other relevant relationships if clearly supported by the text.
+  4.  Extract multiple relevant triplets if present in the text.
+  5.  Focus on factual assertions made in the text. Avoid inferring relationships not directly supported.
+  6.  If no relevant OSINT triplets can be extracted from the text, return an empty list for "edges".
+
+  IMPORTANT: Your response MUST be a valid JSON object without any additional text or explanation. Format your output exactly as follows:
   {
     "edges": [
       {
-        "node_1": "Concept 1",
-        "edge": "Relationship between the two nodes",
-        "node_2": "Concept 2"
+        "node_1": "Identified Subject Entity",
+        "edge": "Determined Relationship Predicate",
+        "node_2": "Identified Object Entity"
       },
-      {...}
+      {...} // Additional triplets if found
     ]
   }
+
 
 XML_KG_PROMPT: |
   You are a knowledge graph expert that extracts terms and their relations from a given context.

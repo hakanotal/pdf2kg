@@ -81,3 +81,9 @@ pdf2kg/
 ## Contact
 
 For questions or feedback: hotal [AT] albany [DOT] edu
+
+
+## TODO:
+
+- add predefined edge types and structure
+- add predefined node types to the prompt

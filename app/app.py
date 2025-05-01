@@ -141,8 +141,10 @@ def create_app():
                             
                             # Step 4: Post-process Knowledge Graph
                             print("Step 4/4: Post-processing Knowledge Graph")
-                            pp_result = postprocess_knowledge_graph(kg_path, final_dir)
+                            pp_result, combined_nodes_info = postprocess_knowledge_graph(kg_path, final_dir, config=config)
                             results.append(f"Post-processed Knowledge Graph: saved to {final_dir}")
+                            if combined_nodes_info:
+                                results.append("\n" + combined_nodes_info)
                             
                             print("Pipeline completed")
                             return "\n".join(results)
@@ -250,18 +252,19 @@ def create_app():
                         s4_status = gr.Textbox(label="Status", value="Ready", interactive=False)
                         s4_run_button = gr.Button("Post-process Knowledge Graph", variant="primary")
                         s4_output_text = gr.Textbox(label="Output", interactive=False)
+                        s4_combined_nodes_info = gr.Textbox(label="Redundant Nodes Eliminated", interactive=False, lines=10)
                         
                         def run_step4(input_file, output_path):
                             if not input_file or not output_path:
-                                return "Please provide both input file and output path."
+                                return "Please provide both input file and output path.", ""
                             os.makedirs(os.path.dirname(output_path), exist_ok=True)
-                            pp_result = postprocess_knowledge_graph(input_file, output_path)
-                            return f"Post-processed Knowledge Graph: saved to {output_path}"
+                            output_dir, combined_nodes_info = postprocess_knowledge_graph(input_file, output_path, config=config)
+                            return f"Post-processed Knowledge Graph: saved to {output_path}", combined_nodes_info or "No redundant nodes were eliminated."
                         
                         s4_run_button.click(
                             fn=run_step4,
                             inputs=[s4_input_file, s4_output_path],
-                            outputs=[s4_output_text]
+                            outputs=[s4_output_text, s4_combined_nodes_info]
                         )
             
             # Visualization Tab
