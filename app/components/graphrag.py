@@ -2,9 +2,9 @@ import pandas as pd
 import networkx as nx
 import community as community_louvain  # python-louvain library
 from collections import defaultdict
-import requests
 import time
 import os
+from app.utils.ollama_client import OllamaClient
 
 
 def load_graph_from_csv(filepath: str) -> nx.Graph:
@@ -67,58 +67,6 @@ def detect_communities(graph: nx.Graph) -> tuple:
     return partition, status_msg
 
 
-def call_ollama_api(prompt: str, context: str = "", model: str = "gemma3:12b", 
-                    ollama_url: str = "http://localhost:11434",
-                    max_retries: int = 3, retry_delay: int = 2):
-    """
-    Calls a language model using the Ollama API.
-    
-    Args:
-        prompt: The main instruction or question
-        context: Additional context or information to include
-        model: The name of the Ollama model to use
-        ollama_url: URL to the Ollama API
-        max_retries: Maximum number of retry attempts for API calls
-        retry_delay: Delay in seconds between retries
-        
-    Returns:
-        The generated text response from the LLM and a status message
-    """
-    status_msg = f"Calling LLM ({model})..."
-    
-    try:
-        # Prepare the API request
-        payload = {
-            "model": model,
-            "prompt": f"{prompt}\n\n{context}",
-            "stream": False
-        }
-        
-        # Implement retry logic
-        for attempt in range(max_retries):
-            try:
-                response = requests.post(ollama_url+"/api/generate", json=payload, timeout=60)
-                response.raise_for_status()  # Raise exception for 4XX/5XX responses
-                
-                # Parse the response
-                result = response.json()
-                return result.get("response", ""), status_msg + " Done."
-                
-            except requests.exceptions.RequestException as e:
-                if attempt < max_retries - 1:
-                    status_msg += f"\nAPI call failed (attempt {attempt+1}/{max_retries}): {str(e)}. Retrying in {retry_delay} seconds..."
-                    time.sleep(retry_delay)
-                else:
-                    raise  # Re-raise the exception on the last attempt
-        
-    except Exception as e:
-        error_msg = f"Error calling Ollama API: {str(e)}"
-        status_msg += f"\n{error_msg}"
-        return f"Error: Could not generate response. {str(e)}", status_msg
-    
-    return "", status_msg
-
-
 def score_helpfulness(partial_answer: str) -> int:
     """
     Extract the helpfulness score from a partial answer.
@@ -134,7 +82,7 @@ def score_helpfulness(partial_answer: str) -> int:
         return 50  # Default middle score
 
 
-def generate_community_summaries(graph: nx.Graph, partition: dict, ollama_url: str, model: str) -> tuple:
+def generate_community_summaries(graph: nx.Graph, partition: dict, ollama_client: OllamaClient, model: str) -> tuple:
     """
     Generates summaries for each community using LLM.
     Returns community summaries and status message.
@@ -174,14 +122,14 @@ def generate_community_summaries(graph: nx.Graph, partition: dict, ollama_url: s
 
         # Use the LLM to generate the summary
         prompt = "Generate a comprehensive report of a community based on the provided nodes and edges. Focus on key entities and relationships."
-        summary, _ = call_ollama_api(prompt, context=context_str, ollama_url=ollama_url, model=model)
+        summary = ollama_client.query_llm(prompt, context=context_str, model=model)
         community_summaries[comm_id] = summary
 
     status_msg += f"\nGenerated {len(community_summaries)} community summaries."
     return community_summaries, status_msg
 
 
-def query_graphrag_engine(community_summaries: dict, query: str, ollama_url: str, model: str) -> tuple:
+def query_graphrag_engine(community_summaries: dict, query: str, ollama_client: OllamaClient, model: str) -> tuple:
     """
     Processes a query using the GraphRAG map-reduce approach.
     Returns the final answer and detailed process notes.
@@ -197,7 +145,7 @@ def query_graphrag_engine(community_summaries: dict, query: str, ollama_url: str
     process_notes += "\n--- Map Step: Generating Partial Answers ---\n"
     for comm_id, summary in community_summaries.items():
         prompt = f"Based *only* on the following community summary, generate a partial answer to the query: '{query}'. Also include a helpfulness score (0-100) for this partial answer in the format '(Score: SCORE/100)'."
-        partial_answer, status = call_ollama_api(prompt, context=summary, ollama_url=ollama_url, model=model)
+        partial_answer = ollama_client.query_llm(prompt, context=summary, model=model)
         process_notes += f"\nCommunity {comm_id} Partial Answer:\n{partial_answer[:300]}...\n"
         
         if partial_answer:  # Ensure LLM returned something
@@ -225,13 +173,13 @@ def query_graphrag_engine(community_summaries: dict, query: str, ollama_url: str
 
     process_notes += f"\n--- Generating Final Answer ---\n"
     final_prompt = f"Synthesize the following partial answers into a single, comprehensive final global answer for the query: '{query}'. Ensure the final answer is coherent and addresses the query directly, citing community references where appropriate."
-    final_answer, status = call_ollama_api(final_prompt, context=combined_context, ollama_url=ollama_url, model=model)
+    final_answer = ollama_client.query_llm(final_prompt, context=combined_context, model=model)
 
     process_notes += "\n--- Query Processing Complete ---\n"
     return final_answer, process_notes
 
 
-def process_graph_query(kg_dir: str, query: str, ollama_url: str, model: str) -> tuple:
+def process_graph_query(kg_dir: str, query: str, ollama_host: str = "http://localhost:11434", model: str = "gemma3:12b") -> tuple:
     """
     Complete GraphRAG workflow: load graph, detect communities, 
     generate summaries, and process the query.
@@ -239,6 +187,9 @@ def process_graph_query(kg_dir: str, query: str, ollama_url: str, model: str) ->
     Returns: (final_answer, process_notes)
     """
     process_notes = ""
+    
+    # Initialize OllamaClient
+    ollama_client = OllamaClient(host=ollama_host)
     
     # 1. Load the graph
     csv_filepath = os.path.join(kg_dir, "finalgraph.csv")
@@ -256,7 +207,7 @@ def process_graph_query(kg_dir: str, query: str, ollama_url: str, model: str) ->
         return "Error: Failed to detect communities in the graph.", process_notes
     
     # 3. Generate community summaries
-    community_summaries, status = generate_community_summaries(graph, partition, ollama_url, model)
+    community_summaries, status = generate_community_summaries(graph, partition, ollama_client, model)
     process_notes += status + "\n\n"
     
     if not community_summaries:
@@ -264,7 +215,7 @@ def process_graph_query(kg_dir: str, query: str, ollama_url: str, model: str) ->
     
     # 4. Process the query
     final_answer, query_process = query_graphrag_engine(
-        community_summaries, query, ollama_url, model)
+        community_summaries, query, ollama_client, model)
     process_notes += query_process
     
     return final_answer, process_notes 

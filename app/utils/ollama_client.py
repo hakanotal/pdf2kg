@@ -5,6 +5,7 @@ import re
 import xml.etree.ElementTree as ET
 import os
 import yaml
+import time
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -34,6 +35,52 @@ class OllamaClient:
             logger.error(f"Error loading prompts from {prompts_path}: {e}")
             return {}
             
+    def query_llm(self, prompt, context="", model="gemma3:12b", temperature=0, max_retries=3, retry_delay=2):
+        """General purpose method to query the Ollama LLM.
+        
+        Args:
+            prompt: The main instruction or question
+            context: Additional context or information to include
+            model: Name of the Ollama model to use
+            temperature: Sampling temperature (0.0 to 1.0)
+            max_retries: Maximum number of retry attempts
+            retry_delay: Delay in seconds between retries
+            
+        Returns:
+            The generated text response from the LLM
+        """
+        if context:
+            user_content = f"{prompt}\n\n{context}"
+        else:
+            user_content = prompt
+            
+        for attempt in range(max_retries):
+            try:
+                # Call the Ollama API
+                response = self.client.chat(
+                    model=model,
+                    stream=False,
+                    options={
+                        "temperature": temperature,          
+                    },
+                    messages=[
+                        {"role": "user", "content": user_content}
+                    ]
+                )
+                
+                # Get the content from the last message
+                return response['message']['content']
+                
+            except Exception as e:
+                logger.error(f"API call failed (attempt {attempt+1}/{max_retries}): {str(e)}")
+                if attempt < max_retries - 1:
+                    logger.info(f"Retrying in {retry_delay} seconds...")
+                    time.sleep(retry_delay)
+                else:
+                    logger.error(f"All retries failed: {str(e)}")
+                    return f"Error: Could not generate response. {str(e)}"
+        
+        return ""
     
     def extract_json_from_response(self, response_text):
         """Extract JSON from the response text, handling potential text before or after the JSON."""
