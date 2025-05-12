@@ -28,7 +28,7 @@ def get_logger(name):
     handler.setFormatter(formatter)
     logger.addHandler(handler)
     logger.setLevel(log_level)
-    
+    logger.propagate = False
     return logger
 
 def get_log_level_from_config():
