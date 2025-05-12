@@ -4,6 +4,10 @@ import sys
 import glob
 from pathlib import Path
 import shutil
+from app.utils.logger import get_logger
+
+# Get logger
+logger = get_logger(__name__)
 
 def convert_pdfs_to_md(input_dir, output_dir, ollama_url="http://localhost:11434", ollama_model="llama3.2-vision:11b", progress=None):
     """
@@ -27,11 +31,12 @@ def convert_pdfs_to_md(input_dir, output_dir, ollama_url="http://localhost:11434
     
     # Install marker-pdf if not already installed
     try:
+        logger.info("Installing/upgrading marker-pdf package")
         subprocess.run([sys.executable, "-m", "pip", "install", "-q", "-U", "marker-pdf[full]"], 
                       check=True, capture_output=True)
     except subprocess.CalledProcessError as e:
-        print(f"Error installing marker-pdf: {e}")
-        print(f"Error output: {e.stderr.decode()}")
+        logger.error(f"Error installing marker-pdf: {e}")
+        logger.error(f"Error output: {e.stderr.decode()}")
         return 0
     
     if progress:
@@ -39,6 +44,9 @@ def convert_pdfs_to_md(input_dir, output_dir, ollama_url="http://localhost:11434
     
     # Convert PDFs to Markdown using marker
     try:
+        total_files = len(list(Path(input_dir).glob('**/*.pdf')))
+        logger.info(f"Starting conversion of {total_files} PDF files to Markdown")
+        
         cmd = [
             "marker",
             "--workers", "2",
@@ -53,6 +61,7 @@ def convert_pdfs_to_md(input_dir, output_dir, ollama_url="http://localhost:11434
             "--output_dir", output_dir
         ]
         
+        logger.info(f"Running marker command: {' '.join(cmd)}")
         process = subprocess.Popen(
             cmd,
             stdout=subprocess.PIPE,
@@ -62,7 +71,6 @@ def convert_pdfs_to_md(input_dir, output_dir, ollama_url="http://localhost:11434
         )
         
         # Monitor the conversion process
-        total_files = len(list(Path(input_dir).glob('**/*.pdf')))
         processed_files = 0
         
         for line in process.stdout:
@@ -80,11 +88,11 @@ def convert_pdfs_to_md(input_dir, output_dir, ollama_url="http://localhost:11434
         
         if process.returncode != 0:
             stderr = process.stderr.read()
-            print(f"Error converting PDFs: {stderr}")
+            logger.error(f"Error converting PDFs: {stderr}")
             return 0
         
     except Exception as e:
-        print(f"Error converting PDFs: {e}")
+        logger.error(f"Error converting PDFs: {e}")
         return 0
     
     if progress:
@@ -92,6 +100,7 @@ def convert_pdfs_to_md(input_dir, output_dir, ollama_url="http://localhost:11434
     
     # Move all Markdown files to the output directory
     try:
+        logger.info("Organizing Markdown files to the output directory")
         # Find all .md files in subdirectories and move them to the top level
         for md_file in Path(output_dir).glob('**/*.md'):
             if md_file.parent != Path(output_dir):
@@ -102,7 +111,7 @@ def convert_pdfs_to_md(input_dir, output_dir, ollama_url="http://localhost:11434
             if dir_path.is_dir():
                 shutil.rmtree(str(dir_path))
     except Exception as e:
-        print(f"Error organizing Markdown files: {e}")
+        logger.error(f"Error organizing Markdown files: {e}")
     
     # Count the number of Markdown files
     md_files = list(Path(output_dir).glob('*.md'))
@@ -111,4 +120,5 @@ def convert_pdfs_to_md(input_dir, output_dir, ollama_url="http://localhost:11434
     if progress:
         progress(1.0, desc=f"Conversion complete: {md_count} Markdown files")
     
+    logger.info(f"Conversion complete: {md_count} Markdown files created")
     return md_count 

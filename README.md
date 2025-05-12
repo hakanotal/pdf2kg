@@ -4,7 +4,7 @@ Convert PDF documents into knowledge graphs for knowledge representation and rea
 
 ## Overview
 
-PDF2KG provides a complete pipeline for converting PDF documents into knowledge graphs. It processes PDFs through multiple stages: filtering small PDFs, converting to markdown, generating a knowledge graph, post-processing, and visualization.
+PDF2KG provides a complete pipeline for converting PDF documents into knowledge graphs. It processes PDFs through multiple stages: filtering small PDFs, converting to markdown, translating non-English content to English, generating a knowledge graph, post-processing, and visualization.
 
 ## Installation
 
@@ -23,6 +23,25 @@ ollama pull gemma3:1b
 
 PDF2KG uses a `config.yaml` file to customize directories, models, and parameters.
 
+### Logging Configuration
+
+The application uses a centralized logging system. You can adjust the log level in the `config.yaml` file:
+
+```yaml
+settings:
+  log_level: "INFO"  # Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+```
+
+Available log levels:
+- `DEBUG`: Detailed information, typically useful for debugging
+- `INFO`: Confirmation that things are working as expected
+- `WARNING`: Indication that something unexpected happened, but the application still works
+- `ERROR`: Due to a more serious problem, the application has not been able to perform a function
+- `CRITICAL`: A serious error, indicating that the application may be unable to continue running
+
+### Prompts Configuration
+
+The system uses a `prompts.yaml` file in the project root directory to define prompts for knowledge graph extraction. You can customize these prompts to adjust the knowledge graph generation process according to your needs.
 
 ## Usage
 
@@ -45,9 +64,10 @@ The application provides a Gradio web interface with these tabs:
 1. **Full Pipeline**: Run the entire conversion process in one go
 2. **1. Filter PDFs**: Remove PDFs below a size threshold
 3. **2. PDF to Markdown**: Transform PDF documents to Markdown
-4. **3. Markdown to KG**: Generate a knowledge graph from Markdown
-5. **4. Post-process**: Refine the knowledge graph
-6. **5. Visualization**: View a static visualization of the knowledge graph
+4. **2.5. Translate Markdown**: Translate non-English Markdown content to English
+5. **3. Markdown to KG**: Generate a knowledge graph from Markdown
+6. **4. Post-process**: Refine the knowledge graph
+7. **5. Visualization**: View a static visualization of the knowledge graph
 
 ### Workflow
 
@@ -64,8 +84,10 @@ pdf2kg/
 ├── app/                   # Main application code
 │   ├── components/        # Pipeline components
 │   ├── utils/             # Utility functions
+│   │   └── logger.py      # Centralized logging utility
 │   └── app.py             # Gradio application
 ├── config.yaml            # Configuration file
+├── prompts.yaml           # Knowledge graph extraction prompts
 ├── input/                 # Input directories
 ├── output/                # Output directories
 ├── main.py                # Entry point
@@ -76,6 +98,7 @@ pdf2kg/
 
 - Python 3.11+
 - Ollama with `llama3.2-vision:11b` and `gemma3:1b` models
+- Internet connection for translation services (Google Translate API)
 - Dependencies listed in requirements.txt
 
 ## Contact

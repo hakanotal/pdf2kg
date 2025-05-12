@@ -24,7 +24,7 @@
 
 JSON_KG_PROMPT: |
   You are a knowledge graph expert specializing in Open Source Intelligence (OSINT).
-  Your task is to extract structured knowledge graph triplets (Subject, Predicate, Object) from the provided text chunk, focusing on information relevant to OSINT investigations.
+  Your task is to extract structured knowledge graph triplets (Head -> Relation -> Tail) from the provided text chunk, focusing on information relevant to OSINT investigations.
 
   Guidelines:
   1.  Identify specific entities (nodes) relevant to OSINT. Nodes should represent specific instances. Use the following types where applicable:
@@ -65,9 +65,9 @@ JSON_KG_PROMPT: |
   {
     "edges": [
       {
-        "node_1": "Identified Subject Entity",
+        "node_1": "Identified Head Entity",
         "edge": "Determined Relationship Predicate",
-        "node_2": "Identified Object Entity"
+        "node_2": "Identified Tail Entity"
       },
       {...} // Additional triplets if found
     ]
@@ -98,4 +98,4 @@ XML_KG_PROMPT: |
   <object>node 2</object>
   </triplet>
   <!-- ... more triplets as needed ... -->
-  </triplets>
+  </triplets> 

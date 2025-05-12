@@ -3,6 +3,10 @@ import shutil
 from PyPDF2 import PdfReader
 from pathlib import Path
 from tqdm import tqdm
+from app.utils.logger import get_logger
+
+# Get logger
+logger = get_logger(__name__)
 
 def filter_small_pdfs(input_dir, output_dir, min_size_kb=50, progress=None):
     """
@@ -22,6 +26,7 @@ def filter_small_pdfs(input_dir, output_dir, min_size_kb=50, progress=None):
     
     # Get all PDF files from input directory
     pdf_files = list(Path(input_dir).glob('**/*.pdf'))
+    logger.info(f"Found {len(pdf_files)} PDF files in {input_dir}")
     
     # Set up progress tracking
     filtered_count = 0
@@ -51,6 +56,7 @@ def filter_small_pdfs(input_dir, output_dir, min_size_kb=50, progress=None):
                 shutil.copy2(pdf_file, output_path)
                 filtered_count += 1
             except Exception as e:
-                print(f"Skipped invalid PDF: {pdf_file} - {str(e)}")
+                logger.warning(f"Skipped invalid PDF: {pdf_file} - {str(e)}")
     
+    logger.info(f"Filtered {filtered_count} PDF files (size >= {min_size_kb}KB) from {total_files} total files")
     return filtered_count 

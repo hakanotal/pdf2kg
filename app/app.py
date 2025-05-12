@@ -4,12 +4,17 @@ import gradio as gr
 import tempfile
 import yaml
 from pathlib import Path
+from app.utils.logger import get_logger
+
+# Get logger
+logger = get_logger(__name__)
 
 # Add the root directory to the path so we can import from the utils directory
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.components.filter_small_pdfs import filter_small_pdfs
 from app.components.pdf_to_md import convert_pdfs_to_md
+from app.components.md_translation import translate_markdown_files
 from app.components.md_to_kg import markdown_to_knowledge_graph
 from app.components.postprocess_kg import postprocess_knowledge_graph
 from app.components.graphrag import process_graph_query
@@ -22,10 +27,10 @@ def load_config():
     try:
         with open(config_path, 'r') as f:
             config = yaml.safe_load(f)
-        print(f"Configuration loaded from {config_path}")
+        logger.info(f"Configuration loaded from {config_path}")
         return config
     except Exception as e:
-        print(f"Error loading config file: {e}, using default configuration")
+        logger.error(f"Error loading config file: {e}, using default configuration")
         return {}
 
 # Create default directories
@@ -39,6 +44,8 @@ def create_default_directories(config):
     # Create output directories
     os.makedirs(config["directories"]["output"]["kg"], exist_ok=True)
     os.makedirs(config["directories"]["output"]["final"], exist_ok=True)
+    
+    logger.info("Default directories created")
     
     return {
         "input_all": os.path.abspath(config["directories"]["input"]["all"]),
@@ -103,30 +110,35 @@ def create_app():
                             results = []
                             
                             # Step 1: Filter small PDFs
-                            print("Step 1/4: Filtering small PDFs")
+                            logger.info("Step 1/5: Filtering small PDFs")
                             filtered_count = filter_small_pdfs(input_dir, pdf_filtered_dir, min_size_kb)
                             results.append(f"Filtered PDFs: {filtered_count} files saved to {pdf_filtered_dir}")
                             
                             # Step 2: Convert PDFs to Markdown
-                            print("Step 2/4: Converting PDFs to Markdown")
+                            logger.info("Step 2/5: Converting PDFs to Markdown")
                             md_count = convert_pdfs_to_md(pdf_filtered_dir, md_dir, ollama_url, vision_model)
                             results.append(f"Converted to Markdown: {md_count} files saved to {md_dir}")
                             
-                            # Step 3: Create Knowledge Graph
-                            print("Step 3/4: Creating Knowledge Graph")
+                            # Step 3: Translate Markdown files if needed
+                            logger.info("Step 3/5: Translating non-English Markdown files")
+                            translated_count = translate_markdown_files(md_dir)
+                            results.append(f"Translated Markdown files: {translated_count} files processed in {md_dir}")
+                            
+                            # Step 4: Create Knowledge Graph
+                            logger.info("Step 4/5: Creating Knowledge Graph")
                             kg_path = os.path.join(kg_dir, "knowledge_graph.json")
                             kg_result = markdown_to_knowledge_graph(md_dir, kg_path, ollama_url, kg_model, 
                                                                    chunk_size, chunk_overlap, kg_format)
                             results.append(f"Knowledge Graph created: {kg_result} saved to {kg_path}")
                             
-                            # Step 4: Post-process Knowledge Graph
-                            print("Step 4/4: Post-processing Knowledge Graph")
+                            # Step 5: Post-process Knowledge Graph
+                            logger.info("Step 5/5: Post-processing Knowledge Graph")
                             pp_result, combined_nodes_info = postprocess_knowledge_graph(kg_path, final_dir, config=config)
                             results.append(f"Post-processed Knowledge Graph: saved to {final_dir}")
                             if combined_nodes_info:
                                 results.append("\n" + combined_nodes_info)
                             
-                            print("Pipeline completed")
+                            logger.info("Pipeline completed")
                             return "\n".join(results)
                         
                         run_button.click(
@@ -184,6 +196,33 @@ def create_app():
                             fn=run_step2,
                             inputs=[s2_input_dir, s2_output_dir, s2_ollama_url, s2_ollama_model],
                             outputs=[s2_output_text]
+                        )
+            
+            with gr.TabItem("2.5. Translate Markdown"):
+                with gr.Row():
+                    with gr.Column():
+                        s25_input_dir = gr.Textbox(label="Input Markdown Directory", value=default_dirs["input_md"], placeholder="Path to directory containing Markdown files")
+                        s25_output_dir = gr.Textbox(label="Output Directory", value=default_dirs["input_md"], placeholder="Path to save translated Markdown files (same as input to overwrite)")
+                    with gr.Column():
+                        s25_status = gr.Textbox(label="Status", value="Ready", interactive=False)
+                        s25_run_button = gr.Button("Translate Markdown", variant="primary")
+                        s25_output_text = gr.Textbox(label="Output", interactive=False)
+                        
+                        def run_step25(input_dir, output_dir):
+                            if not input_dir:
+                                return "Please provide input directory."
+                            if not output_dir:
+                                output_dir = input_dir  # Default to input dir if not specified (overwrites files)
+                            else:
+                                os.makedirs(output_dir, exist_ok=True)
+                            
+                            translated_count = translate_markdown_files(input_dir, output_dir)
+                            return f"Translated Markdown files: {translated_count} files processed."
+                        
+                        s25_run_button.click(
+                            fn=run_step25,
+                            inputs=[s25_input_dir, s25_output_dir],
+                            outputs=[s25_output_text]
                         )
             
             with gr.TabItem("3. Markdown to KG"):

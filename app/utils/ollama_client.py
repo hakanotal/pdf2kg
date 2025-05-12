@@ -1,15 +1,14 @@
 from ollama import Client
 import json
-import logging
 import re
 import xml.etree.ElementTree as ET
 import os
 import yaml
 import time
+from app.utils.logger import get_logger
 
-# Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
+# Get logger
+logger = get_logger(__name__)
 
 class OllamaClient:
     """A wrapper for the Ollama client with custom functionality."""
@@ -24,8 +23,11 @@ class OllamaClient:
         self.prompts = self._load_prompts()
     
     def _load_prompts(self):
-        """Load prompts from the YAML file."""
-        prompts_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "prompts.yaml")
+        """Load prompts from the YAML file in the project root directory."""
+        # Get the project root directory (3 levels up from this file)
+        project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        prompts_path = os.path.join(project_root, "prompts.yaml")
+        
         try:
             with open(prompts_path, 'r') as f:
                 prompts = yaml.safe_load(f)

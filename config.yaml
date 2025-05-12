@@ -1,4 +1,6 @@
 # PDF2KG Configuration File
+settings:
+  log_level: "INFO"  # Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
 
 # Directory paths
 directories:

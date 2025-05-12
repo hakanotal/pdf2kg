@@ -16,3 +16,4 @@ ollama
 gradio
 pyvis
 gliner
+deep-translator
