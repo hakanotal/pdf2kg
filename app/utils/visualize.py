@@ -9,6 +9,7 @@ import logging
 import matplotlib.patches as mpatches
 import yaml
 from matplotlib.cm import get_cmap
+from pyvis.network import Network
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -342,4 +343,222 @@ def create_knowledge_graph_visualization(graph_data_path, metadata_path=None, ou
         logger.error(f"Error creating visualization: {e}")
         if progress:
             progress(0.0, desc=f"Error creating visualization: {e}")
-        return None 
+        return None
+
+def create_interactive_knowledge_graph(graph_data_path, metadata_path=None, output_path="visualization.html", 
+                                      progress=None, show_contextual_proximity=True):
+    """
+    Create an interactive visualization of the knowledge graph using pyvis
+    
+    Args:
+        graph_data_path: Path to the graph data CSV (finalgraph.csv)
+        metadata_path: Path to the node metadata CSV (metadata.csv) with entity type information
+        output_path: Path to save the HTML visualization
+        progress: Optional progress callback for Gradio
+        show_contextual_proximity: Toggle to show/hide contextual_proximity edges
+        
+    Returns:
+        str: HTML string containing the interactive visualization
+    """
+    if progress:
+        progress(0.1, desc="Loading graph data")
+    
+    try:
+        # Load graph data
+        graph_df = pd.read_csv(graph_data_path)
+        logger.info(f"Loaded graph data with {len(graph_df)} edges for interactive visualization")
+        
+        # Load entity types from config
+        config = load_config()
+        entity_labels = config.get('entity_classification', {}).get('entity_labels', [])
+        logger.info(f"Loaded {len(entity_labels)} entity types from config")
+        
+        # Generate colors for entity types
+        entity_type_colors = generate_entity_colors(entity_labels)
+        
+        # Load metadata if available
+        node_entity_types = {}
+        
+        if metadata_path and os.path.exists(metadata_path):
+            try:
+                metadata_df = pd.read_csv(metadata_path)
+                if 'id' in metadata_df.columns and 'entity_type' in metadata_df.columns:
+                    node_entity_types = dict(zip(metadata_df['id'], metadata_df['entity_type']))
+                    logger.info(f"Loaded metadata with entity types for {len(node_entity_types)} nodes")
+                    
+                    # Add any entity types from metadata that weren't in config
+                    unique_entity_types = set(node_entity_types.values())
+                    for entity_type in unique_entity_types:
+                        if entity_type not in entity_type_colors and entity_type != 'default':
+                            new_types = [et for et in unique_entity_types if et not in entity_type_colors and et != 'default']
+                            new_colors = generate_entity_colors(new_types)
+                            entity_type_colors.update(new_colors)
+                else:
+                    logger.warning("Metadata file does not contain required columns (id, entity_type)")
+            except Exception as e:
+                logger.warning(f"Error loading metadata: {e}")
+        
+        # Create an empty NetworkX graph
+        if progress:
+            progress(0.4, desc="Creating network graph")
+        
+        G = nx.Graph()
+        
+        # Add nodes and edges to the graph
+        for _, row in graph_df.iterrows():
+            source = row['source']
+            target = row['target']
+            edge_type = row.get('edge_type', 'default')
+            
+            # Skip contextual_proximity edges if toggle is off
+            if not show_contextual_proximity and edge_type == 'contextual_proximity':
+                continue
+            
+            # Add nodes if they don't exist, with entity type from metadata
+            if source not in G.nodes:
+                entity_type = node_entity_types.get(source, 'default')
+                G.add_node(source, label=source, title=source, group=entity_type)
+            
+            if target not in G.nodes:
+                entity_type = node_entity_types.get(target, 'default')
+                G.add_node(target, label=target, title=target, group=entity_type)
+            
+            # Add the edge with weight and title
+            weight = row.get('value', 1)
+            edge_label = row.get('edge', '')
+            G.add_edge(source, target, weight=weight, title=edge_label, edge_type=edge_type)
+        
+        # Create the pyvis Network
+        if progress:
+            progress(0.7, desc="Generating interactive visualization")
+            
+        # Create pyvis network with better options for visibility
+        nt = Network(height="700px", width="100%", notebook=False, directed=False)
+        
+        # Set physics options for better layout
+        nt.barnes_hut(gravity=-80000, central_gravity=0.3, spring_length=250, spring_strength=0.001, damping=0.09)
+        
+        # Configure global node options for better visibility
+        nt.set_options("""
+        {
+          "nodes": {
+            "font": {
+              "size": 8,
+              "face": "arial",
+              "bold": true
+            },
+            "scaling": {
+              "label": {
+                "enabled": true,
+                "min": 14,
+                "max": 24
+              }
+            }
+          },
+          "edges": {
+            "font": {
+              "size": 12,
+              "align": "middle"
+            },
+            "smooth": {
+              "type": "continuous",
+              "forceDirection": "none"
+            },
+            "arrows": {
+              "to": {
+                "enabled": true
+              }
+            }
+          },
+          "physics": {
+            "stabilization": {
+              "iterations": 100
+            }
+          },
+          "interaction": {
+            "hover": true,
+            "navigationButtons": false,
+            "tooltipDelay": 100
+          }
+        }
+        """)
+        
+        # Load the NetworkX graph into pyvis
+        nt.from_nx(G)
+        
+        # Set node colors and sizes based on entity type and connectivity
+        for node in nt.nodes:
+            # Set node color based on entity type
+            entity_type = node.get('group', 'default')
+            color = entity_type_colors.get(entity_type, entity_type_colors['default'])
+            node['color'] = color
+            
+            # Adjust node size based on degree
+            neighbors = list(G.neighbors(node['id']))
+            node['size'] = min(8 + 0.2 * len(neighbors), 16)  # Increased base size
+            
+            # Set label to be the same as the node ID
+            node['label'] = str(node['id'])
+            
+            # Set node title/tooltip to show more info on hover
+            node['title'] = f"{node['id']} | <{entity_type}>"
+            
+            # Add font configuration to individual nodes
+            node['font'] = {'size': 16, 'face': 'arial', 'color': 'black'}
+        
+        # Customize edge appearance
+        for edge in nt.edges:
+            source, target = edge['from'], edge['to']
+            edge_data = G.get_edge_data(source, target)
+            
+            if edge_data.get('edge_type') == 'contextual_proximity':
+                edge['color'] = '#808080'  # Gray for contextual proximity
+                edge['width'] = 1 + edge_data.get('weight', 1) * 0.3  # Thinner for contextual
+                edge['dashes'] = True  # Dashed lines for contextual proximity
+                # No labels for contextual proximity edges
+            else:
+                edge['color'] = '#22dd22'  # Green for direct relations
+                edge['width'] = 2 + edge_data.get('weight', 1) * 0.5  # Thicker for relations
+                
+                # Add edge label (only for relation edges, not contextual proximity)
+                if edge_data.get('title'):
+                    edge['label'] = edge_data['title']
+                    # Configure edge label font
+                    edge['font'] = {'size': 12, 'align': 'middle', 'color': '#252525', 'strokeWidth': 2, 'strokeColor': '#ffffff'}
+            
+            # Add title/tooltip to show relation name on hover
+            if edge_data.get('title'):
+                edge['title'] = edge_data['title']
+        
+        # Generate the HTML
+        if progress:
+            progress(0.9, desc="Generating HTML")
+            
+        html = nt.generate_html()
+        
+        # Fix quotes to ensure proper embedding
+        html = html.replace("'", "\"")
+        
+        # Create iframe for embedding
+        iframe_html = f"""<iframe style="width: 100%; height: 700px;margin:0 auto" name="result" allow="midi; geolocation; microphone; camera; 
+        display-capture; encrypted-media;" sandbox="allow-modals allow-forms 
+        allow-scripts allow-same-origin allow-popups 
+        allow-top-navigation-by-user-activation allow-downloads" allowfullscreen="" 
+        allowpaymentrequest="" frameborder="0" srcdoc='{html}'></iframe>"""
+        
+        # Save to file if output_path provided
+        if output_path:
+            with open(output_path, 'w', encoding='utf-8') as f:
+                f.write(html)
+            logger.info(f"Saved interactive visualization HTML to {output_path}")
+        
+        if progress:
+            progress(1.0, desc="Visualization complete")
+        
+        return iframe_html
+    
+    except Exception as e:
+        logger.error(f"Error creating interactive visualization: {e}")
+        if progress:
+            progress(0.0, desc=f"Error creating visualization: {e}")
+        return f"<div>Error creating visualization: {e}</div>" 

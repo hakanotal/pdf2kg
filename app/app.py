@@ -17,7 +17,7 @@ from app.components.md_translation import translate_markdown_files
 from app.components.md_to_kg import markdown_to_knowledge_graph
 from app.components.postprocess_kg import postprocess_knowledge_graph
 from app.components.graphrag import process_graph_query
-from app.utils.visualize import create_knowledge_graph_visualization
+from app.utils.visualize import create_knowledge_graph_visualization, create_interactive_knowledge_graph
 
 def load_config():
     """Load configuration from the config.yaml file."""
@@ -61,7 +61,7 @@ def create_app():
     
     with gr.Blocks(title="PDF2KG - PDF to Knowledge Graph Converter", theme=gr.themes.Soft()) as app:
         gr.Markdown("""
-        ## PDF2KG: Convert PDF documents into knowledge graphs
+        ## PDF2KG: Convert PDF documents into Knowledge Graphs
         
         This application processes PDFs through multiple stages to extract structured information 
         that can be used for knowledge representation and reasoning.
@@ -345,48 +345,87 @@ def create_app():
                         with gr.Column():
                             viz_kg_dir = gr.Textbox(label="Knowledge Graph Directory", value=default_dirs["output_final"], placeholder="Path to directory containing final_kg files")
                             viz_show_contextual = gr.Checkbox(label="Show Contextual Proximity Edges", value=True, info="Toggle to show/hide contextual proximity edges")
+                            viz_viz_type = gr.Radio(label="Visualization Type", choices=["Interactive", "Static"], value="Interactive", info="Choose between interactive (pyvis) or static (matplotlib) visualization")
                             viz_run_button = gr.Button("Visualize Knowledge Graph", variant="primary")
                             viz_status = gr.Textbox(label="Status", value="Ready", interactive=False)
                     
                     with gr.Row():
-                        viz_output = gr.Image(label="Knowledge Graph Visualization", interactive=False) # type="filepath" is default for gr.Image
+                        # Use a single container that changes based on visualization type
+                        viz_output_html = gr.HTML(label="Knowledge Graph Visualization", visible=True)
+                        viz_output_img = gr.Image(label="Knowledge Graph Visualization", interactive=False, visible=False)
                         
-                        def visualize_kg(kg_dir_val, show_contextual_proximity_val):
+                        def visualize_kg(kg_dir_val, show_contextual_proximity_val, viz_type_val):
                             if not kg_dir_val or not os.path.exists(kg_dir_val):
                                 viz_status.value = "Error: KG directory not found."
-                                return None, "Error: KG directory not found."
+                                return None, None, gr.update(visible=True), gr.update(visible=False), "Error: KG directory not found."
                             
                             finalgraph_path = os.path.join(kg_dir_val, "finalgraph.csv")
                             metadata_path = os.path.join(kg_dir_val, "metadata.csv")
                             
                             if not os.path.exists(finalgraph_path):
                                 viz_status.value = "Error: finalgraph.csv not found in the directory."
-                                return None, "Error: finalgraph.csv not found."
+                                return None, None, gr.update(visible=True), gr.update(visible=False), "Error: finalgraph.csv not found."
                             
-                            viz_status.value = "Generating visualization..."
-                            # Create visualization
-                            viz_path = os.path.join(kg_dir_val, "visualization.png")
-
-                            try:
-                                create_knowledge_graph_visualization(
-                                    finalgraph_path, 
-                                    metadata_path if os.path.exists(metadata_path) else None,
-                                    viz_path,
-                                    figsize=(16, 14), # Increased size
-                                    show_contextual_proximity=show_contextual_proximity_val
-                                )
-                                viz_status.value = f"Visualization saved to {viz_path}"
-                                return viz_path, "Visualization complete."                                
-                            except Exception as e:
-                                logger.error(f"Error during visualization: {e}")
-                                viz_status.value = f"Error: {e}"
-                                return None, f"Error: {e}"
+                            # Determine which visualization to create
+                            if viz_type_val == "Interactive":
+                                viz_status.value = "Generating interactive visualization..."
+                                viz_path = os.path.join(kg_dir_val, "visualization.html")
+                                
+                                try:
+                                    html_output = create_interactive_knowledge_graph(
+                                        finalgraph_path, 
+                                        metadata_path if os.path.exists(metadata_path) else None,
+                                        viz_path,
+                                        show_contextual_proximity=show_contextual_proximity_val
+                                    )
+                                    viz_status.value = f"Interactive visualization saved to {viz_path}"
+                                    # Show HTML output, hide Image output
+                                    return html_output, None, gr.update(visible=True), gr.update(visible=False), "Interactive visualization complete."
+                                except Exception as e:
+                                    logger.error(f"Error during interactive visualization: {e}")
+                                    viz_status.value = f"Error: {e}"
+                                    return None, None, gr.update(visible=True), gr.update(visible=False), f"Error: {e}"
+                            else:
+                                # Static visualization (original code)
+                                viz_status.value = "Generating static visualization..."
+                                viz_path = os.path.join(kg_dir_val, "visualization.png")
+                                
+                                try:
+                                    create_knowledge_graph_visualization(
+                                        finalgraph_path, 
+                                        metadata_path if os.path.exists(metadata_path) else None,
+                                        viz_path,
+                                        figsize=(16, 14),
+                                        show_contextual_proximity=show_contextual_proximity_val
+                                    )
+                                    viz_status.value = f"Static visualization saved to {viz_path}"
+                                    # Show Image output, hide HTML output
+                                    return None, viz_path, gr.update(visible=False), gr.update(visible=True), "Static visualization complete."
+                                except Exception as e:
+                                    logger.error(f"Error during static visualization: {e}")
+                                    viz_status.value = f"Error: {e}"
+                                    return None, None, gr.update(visible=True), gr.update(visible=False), f"Error: {e}"
                         
+                        # Update the click function to handle both visualization types
                         viz_run_button.click(
                             fn=visualize_kg,
-                            inputs=[viz_kg_dir, viz_show_contextual],
-                            outputs=[viz_output, viz_status] # viz_output will display the image from the filepath
+                            inputs=[viz_kg_dir, viz_show_contextual, viz_viz_type],
+                            outputs=[viz_output_html, viz_output_img, viz_output_html, viz_output_img, viz_status]
                         )
+                        
+                        # Update visibility based on visualization type
+                        def update_viz_visibility(viz_type_val):
+                            if viz_type_val == "Interactive":
+                                return gr.update(visible=True), gr.update(visible=False)
+                            else:
+                                return gr.update(visible=False), gr.update(visible=True)
+                            
+                        viz_viz_type.change(
+                            fn=update_viz_visibility,
+                            inputs=[viz_viz_type],
+                            outputs=[viz_output_html, viz_output_img]
+                        )
+                        
                 sections.append(section_viz_ui)
 
                 # Section: GraphRAG Chat
