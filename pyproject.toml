@@ -1,0 +1,28 @@
+[project]
+name = "pdf2kg"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "community>=1.0.0b1",
+    "deep-translator>=1.11.4",
+    "gliner>=0.2.21",
+    "gradio>=5.34.2",
+    "langchain>=0.3.25",
+    "langchain-community>=0.3.25",
+    "marker-pdf>=1.7.5",
+    "matplotlib>=3.10.3",
+    "networkx>=3.5",
+    "numpy>=2.3.0",
+    "ollama>=0.5.1",
+    "pandas>=2.3.0",
+    "pypdf2>=3.0.1",
+    "pyvis>=0.3.2",
+    "scikit-learn>=1.7.0",
+    "seaborn>=0.13.2",
+    "torch>=2.7.1",
+    "torchvision>=0.22.1",
+    "tqdm>=4.67.1",
+    "transformers>=4.52.4",
+]

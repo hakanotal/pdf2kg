@@ -10,9 +10,7 @@ PDF2KG provides a complete pipeline for converting PDF documents into knowledge 
 
 ```bash
 # Create a virtual environment and install dependencies
-python3 -m venv ./venv
-source ./venv/bin/activate
-pip install -r requirements.txt
+uv sync
 
 # Install Ollama models
 ollama pull llama3.2-vision:11b
@@ -48,7 +46,7 @@ The system uses a `prompts.yaml` file in the project root directory to define pr
 ### Running the Application (Gradio)
 
 ```bash
-python main.py [options]
+uv run main.py [options]
 ```
 
 Options:
