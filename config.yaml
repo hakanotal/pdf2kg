@@ -19,6 +19,13 @@ ollama:
     vision: "llama3.2-vision:11b"  # Model for PDF to Markdown conversion
     kg: "gemma3:12b"                # Model for knowledge graph extraction
 
+## OpenAI configuration
+# ollama:
+#   url: "https://api.openai.com" # "http://localhost:11434"
+#   models:
+#     vision: "gpt-4.1-mini"  # Model for PDF to Markdown conversion
+#     kg: "gpt-4.1-mini"                # Model for knowledge graph extraction
+
 # Processing parameters
 parameters:
   min_size_kb: 50       # Minimum PDF file size in KB

@@ -36,7 +36,7 @@ def is_port_in_use(host, port):
 def find_available_port(start_port=7860):
     """Find an available port starting from start_port."""
     port = start_port
-    while is_port_in_use('127.0.0.1', port):
+    while is_port_in_use('0.0.0.0', port):
         port += 1
     return port
 
@@ -48,7 +48,7 @@ def main():
     
     # Setup command line arguments
     parser = argparse.ArgumentParser(description='PDF2KG - Convert PDF documents to Knowledge Graphs')
-    parser.add_argument('--host', type=str, default='127.0.0.1', help='Host to run the Gradio interface on')
+    parser.add_argument('--host', type=str, default='0.0.0.0', help='Host to run the Gradio interface on')
     parser.add_argument('--port', type=int, default=7860, help='Port to run the Gradio interface on')
     parser.add_argument('--share', action='store_true', help='Create a publicly shareable link')
     parser.add_argument('--auto-port', action='store_true', help='Automatically find an available port if the specified one is in use')

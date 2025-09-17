@@ -5,6 +5,7 @@ from collections import defaultdict
 import time
 import os
 from app.utils.ollama_client import OllamaClient
+from app.utils.openai_client import OpenAIClient
 from app.utils.logger import get_logger
 
 # Get logger
@@ -214,6 +215,8 @@ def process_graph_query(kg_dir: str, query: str, ollama_host: str = "http://loca
     
     # Initialize OllamaClient
     ollama_client = OllamaClient(host=ollama_host)
+    # ollama_client = OpenAIClient()
+    
     
     # 1. Load the graph
     logger.info(f"Loading knowledge graph from {kg_dir}")

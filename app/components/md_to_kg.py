@@ -12,6 +12,7 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from app.utils.ollama_client import OllamaClient
+from app.utils.openai_client import OpenAIClient
 from app.utils.graph_helpers import chunks2df, df2graph, graph2df, add_ctx_prox_edges, save_graph_to_json
 
 # Configure logging
@@ -107,12 +108,13 @@ def process_single_markdown(md_path, ollama_url, model, chunk_size, chunk_overla
     temp_chunks_path = os.path.join(temp_dir, f"chunks_{md_filename}.csv")
     df.to_csv(temp_chunks_path, index=False)
     
-    # Initialize Ollama client
-    ollama_client = OllamaClient(host=ollama_url)
+    # Initialize LLM client
+    llm_client = OllamaClient(host=ollama_url)
+    # llm_client = OpenAIClient()
     
     # Generate graph from dataframe
     logger.info(f"Generating knowledge graph for {md_filename} using {format_type} format...")
-    graph_list = df2graph(df, ollama_client, model, format_type=format_type, batch_size=5, progress=progress)
+    graph_list = df2graph(df, llm_client, model, format_type=format_type, batch_size=5, progress=progress)
     
     if not graph_list:
         logger.error(f"Failed to generate knowledge graph edges for {md_filename}")

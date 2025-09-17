@@ -32,12 +32,11 @@ def convert_pdfs_to_md(input_dir, output_dir, ollama_url="http://localhost:11434
     # Install marker-pdf if not already installed
     try:
         logger.info("Installing/upgrading marker-pdf package")
-        subprocess.run([sys.executable, "-m", "pip", "install", "-q", "-U", "marker-pdf[full]"], 
+        subprocess.run(["uv", "add", "marker-pdf[full]"], 
                       check=True, capture_output=True)
     except subprocess.CalledProcessError as e:
         logger.error(f"Error installing marker-pdf: {e}")
         logger.error(f"Error output: {e.stderr.decode()}")
-        return 0
     
     if progress:
         progress(0.2, desc="Converting PDFs to Markdown")
@@ -48,14 +47,15 @@ def convert_pdfs_to_md(input_dir, output_dir, ollama_url="http://localhost:11434
         logger.info(f"Starting conversion of {total_files} PDF files to Markdown")
         
         cmd = [
+            # "CUDA_VISIBLE_DEVICES=0,1",
+            # "NUM_DEVICES=2",
             "marker",
-            "--workers", "2",
+            # "--workers", "2",
             "--use_llm",
             "--disable_image_extraction",
             "--ollama_base_url", ollama_url,
             "--ollama_model", ollama_model,
             "--llm_service=marker.services.ollama.OllamaService",
-            "--languages", "en",
             "--output_format", "markdown",
             input_dir,
             "--output_dir", output_dir

@@ -22,8 +22,12 @@ def filter_small_pdfs(input_dir, output_dir, min_size_kb=50, progress=None):
         int: Number of filtered PDF files
     """
     # Create output directory if it doesn't exist
-    os.makedirs(output_dir, exist_ok=True)
-    
+    if os.path.exists(output_dir):
+        logger.info(f"Clearing existing output directory: {output_dir}")
+        shutil.rmtree(output_dir)
+    else:
+        os.makedirs(output_dir, exist_ok=True)
+        
     # Get all PDF files from input directory
     pdf_files = list(Path(input_dir).glob('**/*.pdf'))
     logger.info(f"Found {len(pdf_files)} PDF files in {input_dir}")
